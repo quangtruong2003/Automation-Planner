@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+  <title>Automation Planner</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Title Bar -->
+  <div class="title-bar">
+    <div class="title-bar-drag">
+      <span class="app-icon">🤖</span>
+      <span class="app-title">Automation Planner</span>
+    </div>
+    <div class="window-controls">
+      <button class="window-btn minimize" id="minimizeBtn" title="Minimize">─</button>
+      <button class="window-btn maximize" id="maximizeBtn" title="Maximize">□</button>
+      <button class="window-btn close" id="closeBtn" title="Close">✕</button>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="main-container">
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+      <button class="nav-btn active" data-tab="automation">
+        <span class="nav-icon"></span>
+        <span class="nav-text">Automation</span>
+      </button>
+      <button class="nav-btn" data-tab="history">
+        <span class="nav-icon"></span>
+        <span class="nav-text">History</span>
+      </button>
+      <button class="nav-btn" data-tab="scenarios">
+        <span class="nav-icon"></span>
+        <span class="nav-text">Scenarios</span>
+      </button>
+      <button class="nav-btn" data-tab="notify">
+        <span class="nav-icon"></span>
+        <span class="nav-text">Notify</span>
+      </button>
+    </nav>
+
+    <!-- Content Area -->
+    <main class="content">
+      <!-- Automation Tab -->
+      <section class="tab-content active" id="automation-tab">
+        <div class="automation-container">
+          <h2 class="section-title"> Automation Control</h2>
+
+          <!-- Running Scenario Banner -->
+          <div class="running-scenario-banner" id="runningScenarioBanner" style="display: none;">
+            <div class="running-scenario-info">
+              <span class="running-icon">🎬</span>
+              <div class="running-details">
+                <span class="running-label">Running Scenario:</span>
+                <span class="running-scenario-name" id="runningScenarioName">-</span>
+              </div>
+              <span class="running-badge">ACTIVE</span>
+            </div>
+            <div class="running-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" id="scenarioProgressFill"></div>
+              </div>
+              <span class="progress-text" id="progressText">0 / 0 actions</span>
+            </div>
+            <button class="stop-scenario-btn" id="stopRunningScenarioBtn">
+              <span>⏹️</span> Stop Scenario
+            </button>
+          </div>
+
+          <div class="status-card">
+            <div class="status-icon" id="statusIcon">
+              <div class="emoji-3d">🟢</div>
+            </div>
+            <div class="status-info">
+              <h3 id="statusText">Automation is OFF</h3>
+              <p id="statusDescription">Click the button below to start recording actions</p>
+            </div>
+          </div>
+
+          <div class="control-panel">
+            <button class="toggle-btn" id="automationToggle">
+              <span class="btn-icon">▶️</span>
+              <span class="btn-text">Start Automation</span>
+            </button>
+          </div>
+
+          <div class="automation-grid">
+            <!-- Left Column: Settings -->
+            <div class="settings-section">
+              <h3>Automation Settings</h3>
+              <div class="setting-item">
+                <label class="setting-label">
+                  <span class="setting-icon"></span>
+                  Record Mouse Clicks
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="recordClicks" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-item">
+                <label class="setting-label">
+                  <span class="setting-icon"></span>
+                  Record Mouse Movement
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="recordMovement" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-item">
+                <label class="setting-label">
+                  <span class="setting-icon"></span>
+                  Take Screenshots
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="takeScreenshots" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-item">
+                <label class="setting-label">
+                  <span class="setting-icon"></span>
+                  Capture Interval (ms)
+                </label>
+                <input type="number" class="setting-input" id="captureInterval" value="100" min="10" max="1000">
+              </div>
+            </div>
+
+            <!-- Right Column: Quick Select Scenario -->
+            <div class="quick-scenario-section">
+              <h3> Quick Run Scenario</h3>
+              <p class="section-hint">Select a scenario to run directly</p>
+              <div class="quick-scenario-list" id="quickScenarioList">
+                <div class="quick-scenario-item" data-id="1">
+                  <span class="qs-icon"></span>
+                  <span class="qs-name">Login Flow</span>
+                  <span class="qs-actions">5 actions</span>
+                  <button class="qs-run-btn">▶️ Run</button>
+                </div>
+                <div class="quick-scenario-item" data-id="2">
+                  <span class="qs-icon"></span>
+                  <span class="qs-name">Checkout Process</span>
+                  <span class="qs-actions">4 actions</span>
+                  <button class="qs-run-btn">▶️ Run</button>
+                </div>
+                <div class="quick-scenario-item" data-id="3">
+                  <span class="qs-icon"></span>
+                  <span class="qs-name">Form Filling</span>
+                  <span class="qs-actions">2 actions</span>
+                  <button class="qs-run-btn">▶️ Run</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-section">
+            <div class="stat-card">
+              <span class="stat-value" id="actionCount">0</span>
+              <span class="stat-label">Actions Recorded</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="duration">00:00</span>
+
+              <span class="stat-label">Duration</span>
+
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="screenshotCount">0</span>
+              <span class="stat-label">Screenshots</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History Tab -->
+      <section class="tab-content" id="history-tab">
+        <div class="history-container">
+          <div class="history-header">
+            <h2 class="section-title">📋 Action History</h2>
+            <div class="history-actions">
+              <button class="action-btn" id="exportBtn">
+                <span>📤</span> Export                
+              </button>
+              <button class="action-btn danger" id="clearHistoryBtn">
+                <span>🗑️</span> Clear All
+              </button>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th class="th-id">ID</th>
+                  <th class="th-serial">Serial ID</th>
+                  <th class="th-content">Content</th>
+                  <th class="th-screenshot">Screenshot</th>
+                  <th class="th-date">Created DateTime</th>
+                  <th class="th-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody">
+                <!-- Sample data rows -->
+                <tr>
+                  <td class="td-id">1</td>
+                  <td class="td-serial">ACT-001</td>
+                  <td class="td-content">Mouse click at (450, 320)</td>
+                  <td class="td-screenshot">
+                    <button class="view-screenshot-btn" data-id="1">
+                      📷 View
+                    </button>
+                  </td>
+                  <td class="td-date">2026-02-03 14:30:25</td>
+                  <td class="td-actions">
+                    <button class="row-action-btn play" title="Play">▶️</button>
+                    <button class="row-action-btn edit" title="Edit">✏️</button>
+                    <button class="row-action-btn delete" title="Delete">🗑️</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="td-id">2</td>
+                  <td class="td-serial">ACT-002</td>
+                  <td class="td-content">Key press: Enter</td>
+                  <td class="td-screenshot">
+                    <button class="view-screenshot-btn" data-id="2">
+                      📷 View
+                    </button>
+                  </td>
+                  <td class="td-date">2026-02-03 14:30:28</td>
+                  <td class="td-actions">
+                    <button class="row-action-btn play" title="Play">▶️</button>
+                    <button class="row-action-btn edit" title="Edit">✏️</button>
+                    <button class="row-action-btn delete" title="Delete">🗑️</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="td-id">3</td>
+                  <td class="td-serial">ACT-003</td>
+                  <td class="td-content">Mouse move to (600, 450)</td>
+                  <td class="td-screenshot">
+                    <button class="view-screenshot-btn" data-id="3">
+                      📷 View
+                    </button>
+                  </td>
+                  <td class="td-date">2026-02-03 14:31:05</td>
+                  <td class="td-actions">
+                    <button class="row-action-btn play" title="Play">▶️</button>
+                    <button class="row-action-btn edit" title="Edit">✏️</button>
+                    <button class="row-action-btn delete" title="Delete">🗑️</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <button class="page-btn" id="prevPageBtn">◀ Previous</button>
+            <span class="page-info">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></span>
+            <button class="page-btn" id="nextPageBtn">Next ▶</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scenarios Tab -->
+      <section class="tab-content" id="scenarios-tab">
+        <div class="scenarios-container">
+          <div class="scenarios-header">
+            <h2 class="section-title">📁 Scenario Manager</h2>
+            <button class="action-btn" id="newScenarioBtn">
+              <span>➕</span> New Scenario
+            </button>
+          </div>
+
+          <div class="scenarios-content">
+            <!-- Scenario List Sidebar -->
+            <div class="scenario-list-panel">
+              <h3 class="panel-title">Saved Scenarios</h3>
+              <div class="scenario-list" id="scenarioList">
+                <!-- Sample scenarios -->
+                <div class="scenario-item active" data-id="1">
+                  <span class="scenario-icon">🎮</span>
+                  <div class="scenario-info">
+                    <span class="scenario-name">Login Flow</span>
+                    <span class="scenario-meta">8 actions • Updated 2h ago</span>
+                  </div>
+                </div>
+                <div class="scenario-item" data-id="2">
+                  <span class="scenario-icon">🛒</span>
+                  <div class="scenario-info">
+                    <span class="scenario-name">Checkout Process</span>
+                    <span class="scenario-meta">12 actions • Updated 1d ago</span>
+                  </div>
+                </div>
+                <div class="scenario-item" data-id="3">
+                  <span class="scenario-icon">📝</span>
+                  <div class="scenario-info">
+                    <span class="scenario-name">Form Filling</span>
+                    <span class="scenario-meta">5 actions • Updated 3d ago</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scenario Details Panel -->
+            <div class="scenario-details-panel">
+              <!-- Scenario Header -->
+              <div class="scenario-header">
+                <div class="scenario-title-section">
+                  <span class="scenario-large-icon" id="selectedScenarioIcon">🎮</span>
+                  <div>
+                    <input type="text" class="scenario-title-input" id="scenarioName" value="Login Flow" placeholder="Scenario Name">
+                    <span class="scenario-id">ID: <span id="selectedScenarioId">SCN-001</span></span>
+                  </div>
+                </div>
+                <div class="scenario-actions">
+                  <button class="action-btn" id="saveScenarioBtn">
+                    <span>💾</span> Save
+                  </button>
+                  <button class="action-btn" id="duplicateScenarioBtn">
+                    <span>📋</span> Duplicate
+                  </button>
+                  <button class="action-btn danger" id="deleteScenarioBtn">
+                    <span>🗑️</span> Delete
+                  </button>
+                </div>
+              </div>
+
+              <!-- Scenario Description -->
+              <div class="scenario-description-section">
+                <label class="input-label">Description</label>
+                <textarea class="scenario-description-input" id="scenarioDescription" placeholder="Describe what this scenario does...">Automated login flow for web application testing. Includes username input, password entry, and submit action.</textarea>
+              </div>
+
+              <!-- Scenario Settings -->
+              <div class="scenario-settings-grid">
+                <div class="setting-card">
+                  <h4><span class="setting-icon">🔁</span> Repeat Count</h4>
+                  <input type="number" class="setting-input" id="repeatCount" value="1" min="1" max="100">
+                  <span class="setting-hint">Times to repeat the scenario</span>
+                </div>
+                <div class="setting-card">
+                  <h4><span class="setting-icon">⏱️</span> Delay Between Actions</h4>
+                  <input type="number" class="setting-input" id="actionDelay" value="500" min="0" max="10000">
+                  <span class="setting-hint">Milliseconds between actions</span>
+                </div>
+                <div class="setting-card">
+                  <h4><span class="setting-icon">🐌</span> Movement Speed</h4>
+                  <select class="setting-select" id="movementSpeed">
+                    <option value="instant">Instant</option>
+                    <option value="fast">Fast</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="slow">Slow</option>
+                    <option value="human">Human-like</option>
+                  </select>
+                  <span class="setting-hint">Mouse movement speed</span>
+                </div>
+                <div class="setting-card">
+                  <h4><span class="setting-icon">📸</span> Screenshot</h4>
+                  <label class="switch">
+                    <input type="checkbox" id="scenarioScreenshots" checked>
+                    <span class="slider"></span>
+                  </label>
+                  <span class="setting-hint">Take screenshots during playback</span>
+                </div>
+              </div>
+
+              <!-- Scenario Actions List -->
+              <div class="scenario-actions-section">
+                <div class="section-header">
+                  <h3>Actions in Scenario</h3>
+                  <button class="small-btn" id="addActionBtn">
+                    <span>➕</span> Add Action
+                  </button>
+                </div>
+                <div class="scenario-actions-list" id="scenarioActionsList">
+                  <div class="scenario-action-item" data-action-id="1">
+                    <span class="action-order">1</span>
+                    <span class="action-type">🖱️</span>
+                    <span class="action-details">Click at (120, 450) - Username field</span>
+                    <div class="action-controls">
+                      <button class="row-action-btn edit" title="Edit">✏️</button>
+                      <button class="row-action-btn delete" title="Delete">🗑️</button>
+                    </div>
+                  </div>
+                  <div class="scenario-action-item" data-action-id="2">
+                    <span class="action-order">2</span>
+                    <span class="action-type">⌨️</span>
+                    <span class="action-details">Type "testuser@example.com"</span>
+                    <div class="action-controls">
+                      <button class="row-action-btn edit" title="Edit">✏️</button>
+                      <button class="row-action-btn delete" title="Delete">🗑️</button>
+                    </div>
+                  </div>
+                  <div class="scenario-action-item" data-action-id="3">
+                    <span class="action-order">3</span>
+                    <span class="action-type">➡️</span>
+                    <span class="action-details">Tab to next field</span>
+                    <div class="action-controls">
+                      <button class="row-action-btn edit" title="Edit">✏️</button>
+                      <button class="row-action-btn delete" title="Delete">🗑️</button>
+                    </div>
+                  </div>
+                  <div class="scenario-action-item" data-action-id="4">
+                    <span class="action-order">4</span>
+                    <span class="action-type">⌨️</span>
+                    <span class="action-details">Type password "********"</span>
+                    <div class="action-controls">
+                      <button class="row-action-btn edit" title="Edit">✏️</button>
+                      <button class="row-action-btn delete" title="Delete">🗑️</button>
+                    </div>
+                  </div>
+                  <div class="scenario-action-item" data-action-id="5">
+                    <span class="action-order">5</span>
+                    <span class="action-type">🖱️</span>
+                    <span class="action-details">Click at (850, 520) - Login button</span>
+                    <div class="action-controls">
+                      <button class="row-action-btn edit" title="Edit">✏️</button>
+                      <button class="row-action-btn delete" title="Delete">🗑️</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Playback Controls -->
+              <div class="playback-controls">
+                <button class="playback-btn primary" id="runScenarioBtn">
+                  <span>▶️</span> Run Scenario
+                </button>
+                <button class="playback-btn" id="testRunScenarioBtn">
+                  <span>⚡</span> Quick Test
+                </button>
+                <button class="playback-btn" id="stopScenarioBtn" style="display: none;">
+                  <span>⏹️</span> Stop
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Notify Tab -->
+      <section class="tab-content" id="notify-tab">
+        <div class="notify-container">
+          <h2 class="section-title">🔔 Telegram Notification Setup</h2>
+
+          <!-- Connection Status Card -->
+          <div class="telegram-status-card" id="telegramStatusCard">
+            <div class="telegram-status-icon" id="telegramStatusIcon">
+              <span class="telegram-emoji">🤖</span>
+            </div>
+            <div class="telegram-status-info">
+              <h3 id="telegramStatusText">Telegram Bot Disconnected</h3>
+              <p id="telegramStatusDescription">Configure your Telegram bot to receive notifications</p>
+            </div>
+            <div class="telegram-status-badge" id="telegramStatusBadge">
+              <span class="status-badge-text">OFFLINE</span>
+            </div>
+          </div>
+
+          <!-- Configuration Form -->
+          <div class="notify-config-section">
+            <h3>Bot Configuration</h3>
+            <p class="section-hint">Enter your Telegram Bot credentials to enable notifications</p>
+
+            <div class="notify-form-grid">
+              <div class="form-group">
+                <label>
+                  <span class="form-icon"></span>
+                  Bot Token
+                </label>
+                <input type="text" id="botToken" placeholder="Enter your Telegram Bot Token">
+                <span class="form-hint">Get token from @BotFather on Telegram</span>
+              </div>
+
+              <div class="form-group">
+                <label>
+                  <span class="form-icon"></span>                  
+                  Chat ID                  
+                </label>
+                <input type="text" id="chatId" placeholder="Enter your Chat ID">
+                <span class="form-hint">Your Telegram user or group ID</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <span class="form-icon"></span>
+                Bot Name (Optional)
+              </label>
+              <input type="text" id="botName" placeholder="My Automation Bot">
+              <span class="form-hint">A friendly name to identify this bot</span>
+            </div>
+
+            <!-- Notification Settings -->
+            <h4 class="subsection-title">Notification Settings</h4>
+
+            <div class="notify-settings-grid">
+              <div class="notify-setting-card">
+                <div class="notify-setting-header">
+                  <span class="notify-setting-icon"></span>
+                  <span class="notify-setting-label">Automation Start</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="notifyAutomationStart" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="notify-setting-card">
+                <div class="notify-setting-header">
+                  <span class="notify-setting-icon"></span>
+                  <span class="notify-setting-label">Automation Stop</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="notifyAutomationStop" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="notify-setting-card">
+                <div class="notify-setting-header">
+                  <span class="notify-setting-icon"></span>
+                  <span class="notify-setting-label">Scenario Complete</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="notifyScenarioComplete" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="notify-setting-card">
+                <div class="notify-setting-header">
+                  <span class="notify-setting-icon"></span>
+                  <span class="notify-setting-label">Scenario Error</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="notifyScenarioError" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="notify-setting-card">
+                <div class="notify-setting-header">
+                  <span class="notify-setting-icon"></span>
+                  <span class="notify-setting-label">Include Screenshots</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="notifyIncludeScreenshots">
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="notify-setting-card">
+                <div class="notify-setting-header">
+                  <span class="notify-setting-icon"></span>
+                  <span class="notify-setting-label">Hourly Summary</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="notifyHourlySummary">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="notify-actions">
+            <button class="notify-btn primary" id="testConnectionBtn">
+              <span></span> Test Connection
+            </button>
+            <button class="notify-btn" id="saveTelegramSettingsBtn">
+              <span></span> Save Settings
+            </button>
+            <button class="notify-btn danger" id="disconnectTelegramBtn">
+              <span></span> Disconnect
+            </button>
+          </div>
+
+          <!-- Test Message Preview -->
+          <!-- <div class="test-message-section">
+            <h4>Test Message Preview</h4>
+            <div class="test-message-preview" id="testMessagePreview">
+              <div class="test-message-header">
+                <span class="test-bot-icon">🤖</span>
+                <span class="test-bot-name" id="testBotName">My Automation Bot</span>
+              </div>
+              <div class="test-message-body">
+                <p>✅ Automation Planner connected successfully!</p>
+                <p class="test-message-time">You will receive notifications about:</p>
+                <ul class="test-message-list">
+                  <li>Automation start/stop events</li>
+                  <li>Scenario completion status</li>
+                  <li>Error notifications</li>
+                </ul>
+              </div>
+              <div class="test-message-time-footer">
+                <span class="test-message-date">Today at 10:30 AM</span>
+              </div>
+            </div>
+          </div> -->
+
+          <!-- Recent Notifications -->
+          <div class="recent-notifications-section">
+            <h4>Recent Notifications</h4>
+            <div class="notifications-list" id="notificationsList">
+              <div class="empty-notifications">
+                <span class="empty-icon">📭</span>
+                <p>No notifications sent yet</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Incoming Messages Table -->
+          <div class="incoming-messages-section">
+            <div class="incoming-messages-header">
+              <h4>Incoming Messages</h4>
+              <div class="incoming-messages-actions">
+                <button class="small-btn" id="refreshMessagesBtn">
+                  <span>🔄</span> Refresh
+                </button>
+                <button class="small-btn danger" id="clearMessagesBtn">
+                  <span>🗑️</span> Clear All
+                </button>
+              </div>
+            </div>
+            <div class="table-container">
+              <table class="messages-table">
+                <thead>
+                  <tr>
+                    <th class="th-time">Time</th>
+                    <th class="th-sender">Sender</th>
+                    <th class="th-content">Message Content</th>
+                    <th class="th-type">Type</th>
+                    <th class="th-actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="messagesTableBody">
+                  <!-- Messages will be populated here -->
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <button class="page-btn" id="prevMessagePageBtn">◀ Previous</button>
+              <span class="page-info">Page <span id="currentMessagePage">1</span> of <span id="totalMessagePages">1</span></span>
+              <button class="page-btn" id="nextMessagePageBtn">Next ▶</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Screenshot Modal -->
+  <div class="modal" id="screenshotModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Screenshot - <span id="modalScreenshotId">#1</span></h3>
+        <button class="modal-close" id="closeModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="screenshot-placeholder">
+          <span>📷</span>
+          <p>Screenshot Preview</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Scenario Modal -->
+  <div class="modal scenario-modal" id="newScenarioModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create New Scenario</h3>
+        <button class="modal-close" id="closeNewScenarioModalBtn">✕</button>
+      </div>
+      <div class="scenario-modal-body">
+        <div class="form-group">
+          <label>Scenario Name</label>
+          <input type="text" id="newScenarioName" placeholder="Enter scenario name">
+        </div>
+        <div class="form-group">
+          <label>Icon</label>
+          <div class="icon-picker" id="iconPicker">
+            <div class="icon-option selected" data-icon="📁">📁</div>
+            <div class="icon-option" data-icon="🎮">🎮</div>
+            <div class="icon-option" data-icon="🛒">🛒</div>
+            <div class="icon-option" data-icon="📝">📝</div>
+            <div class="icon-option" data-icon="⚙️">⚙️</div>
+            <div class="icon-option" data-icon="🔄">🔄</div>
+            <div class="icon-option" data-icon="📊">📊</div>
+            <div class="icon-option" data-icon="🔍">🔍</div>
+            <div class="icon-option" data-icon="📧">📧</div>
+            <div class="icon-option" data-icon="💰">💰</div>
+            <div class="icon-option" data-icon="🎯">🎯</div>
+            <div class="icon-option" data-icon="🚀">🚀</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description (Optional)</label>
+          <textarea id="newScenarioDescription" placeholder="Describe what this scenario does..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="action-btn" id="confirmCreateScenarioBtn">Create Scenario</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Action Modal -->
+  <div class="modal" id="editActionModal">
+    <div class="modal-content edit-action-modal-content">
+      <div class="modal-header">
+        <h3>✏️ Edit Action</h3>
+        <button class="modal-close" id="closeEditActionModalBtn">✕</button>
+      </div>
+      <div class="modal-body edit-action-modal-body">
+        <div class="edit-action-preview">
+          <span class="edit-action-icon" id="editActionIcon">🖱️</span>
+          <span class="edit-action-type-label" id="editActionTypeLabel">Mouse Click</span>
+        </div>
+        
+        <div class="form-group">
+          <label>Action Details</label>
+          <textarea id="editActionDetails" placeholder="Enter action details..." rows="3"></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label>Coordinates / Target (Optional)</label>
+          <div class="coordinate-inputs">
+            <div class="coord-input">
+              <span class="coord-label">X</span>
+              <input type="number" id="editActionX" placeholder="0">
+            </div>
+            <div class="coord-separator">,</div>
+            <div class="coord-input">
+              <span class="coord-label">Y</span>
+              <input type="number" id="editActionY" placeholder="0">
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-actions">
+          <button class="action-btn" id="cancelEditActionBtn">Cancel</button>
+          <button class="action-btn primary" id="saveEditActionBtn">💾 Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal" id="deleteConfirmModal">
+    <div class="modal-content delete-modal-content">
+      <div class="modal-header delete-modal-header">
+        <div class="delete-icon-wrapper">
+          <span class="delete-icon">🗑️</span>
+        </div>
+        <h3>Delete Action</h3>
+        <button class="modal-close" id="closeDeleteConfirmModalBtn">✕</button>
+      </div>
+      <div class="modal-body delete-modal-body">
+        <p class="delete-warning">Are you sure you want to delete this action? This action cannot be undone.</p>
+        
+        <div class="delete-action-preview" id="deleteConfirmDetails">
+          <!-- Action details will be populated here -->
+        </div>
+        
+        <div class="modal-actions delete-modal-actions">
+          <button class="action-btn" id="cancelDeleteBtn">Cancel</button>
+          <button class="action-btn danger" id="confirmDeleteBtn">🗑️ Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <span class="toast-icon"></span>
+    <span class="toast-message"></span>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
+
