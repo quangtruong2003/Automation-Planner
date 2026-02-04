@@ -35,6 +35,9 @@ let scenarioRepeatCount = 0;
 document.addEventListener('DOMContentLoaded', () => {
   initializeEventListeners();
   updateStats();
+  initializeTelegramSettings();
+  initializeIncomingMessages();
+  initializeScenarios(); // Initialize scenarios after DOM is ready
 });
 
 // Event Listeners
@@ -84,8 +87,75 @@ function initializeEventListeners() {
   document.getElementById('prevPageBtn').addEventListener('click', () => changePage(-1));
   document.getElementById('nextPageBtn').addEventListener('click', () => changePage(1));
 
+  // Quick Run Scenario Buttons
+  initializeQuickRunScenarioListeners();
+
   // Keyboard Shortcuts
   document.addEventListener('keydown', handleKeyboardShortcuts);
+}
+
+// ===========================================
+// QUICK RUN SCENARIO FUNCTIONALITY
+// ===========================================
+
+// Initialize Quick Run Scenario event listeners
+function initializeQuickRunScenarioListeners() {
+  const quickScenarioList = document.getElementById('quickScenarioList');
+  if (!quickScenarioList) return;
+
+  // Event delegation for run buttons
+  quickScenarioList.addEventListener('click', (e) => {
+    const runBtn = e.target.closest('.qs-run-btn');
+    if (runBtn) {
+      e.stopPropagation();
+      const scenarioItem = runBtn.closest('.quick-scenario-item');
+      if (scenarioItem) {
+        const scenarioId = parseInt(scenarioItem.dataset.id);
+        runQuickScenario(scenarioId);
+      }
+    }
+  });
+
+  // Event delegation for scenario item selection
+  quickScenarioList.addEventListener('click', (e) => {
+    const scenarioItem = e.target.closest('.quick-scenario-item');
+    if (scenarioItem && !e.target.closest('.qs-run-btn')) {
+      const scenarioId = parseInt(scenarioItem.dataset.id);
+      // Switch to scenarios tab and select the scenario
+      switchTab('scenarios');
+      selectScenario(scenarioId);
+    }
+  });
+}
+
+// Run Quick Scenario from Quick Run section
+function runQuickScenario(scenarioId) {
+  const scenario = scenarios.find(s => s.id === scenarioId);
+  if (!scenario) {
+    showToast('Scenario not found', 'error');
+    return;
+  }
+
+  if (!scenario.actions || scenario.actions.length === 0) {
+    showToast('This scenario has no actions', 'warning');
+    return;
+  }
+
+  // If a scenario is already running, stop it first
+  if (runningScenarioId !== null) {
+    showToast('Stopping current scenario...', 'info');
+    stopScenarioExecution();
+  }
+
+  // Select and run the scenario
+  selectedScenarioId = scenarioId;
+  showToast(`Running: ${scenario.name}`, 'info');
+
+  // Switch to scenarios tab to show running banner
+  switchTab('scenarios');
+
+  // Start scenario execution
+  startScenarioExecution(scenarioId);
 }
 
 // Tab Switching
@@ -288,9 +358,9 @@ function showToast(message, type = 'info') {
 
   // Set icon based on type
   const icons = {
-    success: '✅',
-    error: '❌',
-    info: 'ℹ️'
+    success: '',
+    error: '',
+    info: ''
   };
   toastIcon.textContent = icons[type] || icons.info;
 
@@ -320,13 +390,14 @@ let scenarios = [
     repeatCount: 1,
     actionDelay: 500,
     movementSpeed: 'normal',
-    takeScreenshots: true,
+    loopOptions: false,
+    triggerByTelegram: false,
     actions: [
-      { id: 1, type: '🖱️', details: 'Click at (120, 450) - Username field' },
-      { id: 2, type: '⌨️', details: 'Type "testuser@example.com"' },
-      { id: 3, type: '➡️', details: 'Tab to next field' },
-      { id: 4, type: '⌨️', details: 'Type password "********"' },
-      { id: 5, type: '🖱️', details: 'Click at (850, 520) - Login button' }
+      { id: 1, type: 'mouseClick', name: 'Click Username Field', parameters: { x: 120, y: 450, button: 'left', clickCount: 1 } },
+      { id: 2, type: 'typeText', name: 'Type Username', parameters: { text: 'testuser@example.com', delayPerCharMs: 50 } },
+      { id: 3, type: 'keyPress', name: 'Tab to Password', parameters: { key: 'Tab' } },
+      { id: 4, type: 'typeText', name: 'Type Password', parameters: { text: '********', delayPerCharMs: 50 } },
+      { id: 5, type: 'mouseClick', name: 'Click Login Button', parameters: { x: 850, y: 520, button: 'left', clickCount: 1 } }
     ],
     updatedAt: '2h ago'
   },
@@ -338,12 +409,13 @@ let scenarios = [
     repeatCount: 1,
     actionDelay: 300,
     movementSpeed: 'human',
-    takeScreenshots: true,
+    loopOptions: false,
+    triggerByTelegram: false,
     actions: [
-      { id: 1, type: '🖱️', details: 'Click at (200, 150) - Cart icon' },
-      { id: 2, type: '🖱️', details: 'Click at (600, 400) - Checkout button' },
-      { id: 3, type: '⌨️', details: 'Type shipping address' },
-      { id: 4, type: '🖱️', details: 'Click at (700, 500) - Continue payment' }
+      { id: 1, type: 'mouseClick', name: 'Click Cart Icon', parameters: { x: 200, y: 150, button: 'left', clickCount: 1 } },
+      { id: 2, type: 'mouseClick', name: 'Click Checkout', parameters: { x: 600, y: 400, button: 'left', clickCount: 1 } },
+      { id: 3, type: 'typeText', name: 'Type Shipping', parameters: { text: '123 Main St', delayPerCharMs: 30 } },
+      { id: 4, type: 'mouseClick', name: 'Continue Payment', parameters: { x: 700, y: 500, button: 'left', clickCount: 1 } }
     ],
     updatedAt: '1d ago'
   },
@@ -355,10 +427,11 @@ let scenarios = [
     repeatCount: 1,
     actionDelay: 200,
     movementSpeed: 'fast',
-    takeScreenshots: false,
+    loopOptions: false,
+    triggerByTelegram: false,
     actions: [
-      { id: 1, type: '🖱️', details: 'Click at (100, 100) - First field' },
-      { id: 2, type: '⌨️', details: 'Type form data' }
+      { id: 1, type: 'mouseClick', name: 'Click First Field', parameters: { x: 100, y: 100, button: 'left', clickCount: 1 } },
+      { id: 2, type: 'typeText', name: 'Type Form Data', parameters: { text: 'Sample data entry', delayPerCharMs: 20 } }
     ],
     updatedAt: '3d ago'
   }
@@ -366,10 +439,160 @@ let scenarios = [
 
 let selectedScenarioId = 1;
 let scenarioCounter = 4;
-let selectedIcon = '📁';
+let selectedIcon = '';
 
 // Initialize Scenarios
+// ===========================================
+// SCENARIO PERSISTENCE FUNCTIONS
+// ===========================================
+
+// Save scenarios to localStorage
+function saveScenarios() {
+  try {
+    localStorage.setItem('scenarios', JSON.stringify(scenarios));
+    localStorage.setItem('scenarioCounter', scenarioCounter.toString());
+    console.log('Scenarios saved to localStorage');
+  } catch (error) {
+    console.error('Failed to save scenarios:', error);
+  }
+}
+
+// Load scenarios from localStorage
+function loadScenarios() {
+  try {
+    const savedScenarios = localStorage.getItem('scenarios');
+    const savedCounter = localStorage.getItem('scenarioCounter');
+
+    if (savedScenarios) {
+      scenarios = JSON.parse(savedScenarios);
+      console.log('Scenarios loaded from localStorage:', scenarios.length, 'scenarios');
+    }
+
+    if (savedCounter) {
+      scenarioCounter = parseInt(savedCounter, 10);
+    }
+  } catch (error) {
+    console.error('Failed to load scenarios:', error);
+  }
+}
+
+// Render Quick Scenario List (in Automation tab)
+function renderQuickScenarioList() {
+  const quickScenarioList = document.getElementById('quickScenarioList');
+  if (!quickScenarioList) return;
+
+  quickScenarioList.innerHTML = scenarios.map(scenario => `
+    <div class="quick-scenario-item" data-id="${scenario.id}">
+      <span class="qs-icon">${scenario.icon || '📁'}</span>
+      <span class="qs-name">${scenario.name}</span>
+      <span class="qs-actions">${scenario.actions.length} actions</span>
+      <button class="qs-run-btn">▶️ Run</button>
+    </div>
+  `).join('');
+}
+
+// ===========================================
+// SCENARIO INITIALIZATION
+// ===========================================
+
+// ===========================================
+// SCENARIO INITIALIZATION
+// ===========================================
+
+// Create default scenarios if none exist
+function createDefaultScenarios() {
+  const defaultScenarios = [
+    {
+      id: 1,
+      icon: '🎮',
+      name: 'Login Flow',
+      description: 'Automated login flow for web application testing. Includes username input, password entry, and submit action.',
+      repeatCount: 1,
+      actionDelay: 500,
+      movementSpeed: 'normal',
+      loopOptions: false,
+      triggerByTelegram: false,
+      actions: [
+        { id: 1, type: 'mouseClick', name: 'Click Username Field', parameters: { x: 120, y: 450, button: 'left', clickCount: 1 } },
+        { id: 2, type: 'typeText', name: 'Type Username', parameters: { text: 'testuser@example.com', delayPerCharMs: 50 } },
+        { id: 3, type: 'keyPress', name: 'Tab to Password', parameters: { key: 'Tab' } },
+        { id: 4, type: 'typeText', name: 'Type Password', parameters: { text: '********', delayPerCharMs: 50 } },
+        { id: 5, type: 'mouseClick', name: 'Click Login Button', parameters: { x: 850, y: 520, button: 'left', clickCount: 1 } }
+      ],
+      updatedAt: 'Just now'
+    },
+    {
+      id: 2,
+      icon: '🛒',
+      name: 'Checkout Process',
+      description: 'Complete e-commerce checkout flow with cart review and payment.',
+      repeatCount: 1,
+      actionDelay: 300,
+      movementSpeed: 'human',
+      loopOptions: false,
+      triggerByTelegram: false,
+      actions: [
+        { id: 1, type: 'mouseClick', name: 'Click Cart Icon', parameters: { x: 200, y: 150, button: 'left', clickCount: 1 } },
+        { id: 2, type: 'mouseClick', name: 'Click Checkout', parameters: { x: 600, y: 400, button: 'left', clickCount: 1 } },
+        { id: 3, type: 'typeText', name: 'Type Shipping', parameters: { text: '123 Main St', delayPerCharMs: 30 } },
+        { id: 4, type: 'mouseClick', name: 'Continue Payment', parameters: { x: 700, y: 500, button: 'left', clickCount: 1 } }
+      ],
+      updatedAt: 'Just now'
+    },
+    {
+      id: 3,
+      icon: '📝',
+      name: 'Form Filling',
+      description: 'Generic form filling automation for data entry tasks.',
+      repeatCount: 1,
+      actionDelay: 200,
+      movementSpeed: 'fast',
+      loopOptions: false,
+      triggerByTelegram: false,
+      actions: [
+        { id: 1, type: 'mouseClick', name: 'Click First Field', parameters: { x: 100, y: 100, button: 'left', clickCount: 1 } },
+        { id: 2, type: 'typeText', name: 'Type Form Data', parameters: { text: 'Sample data entry', delayPerCharMs: 20 } }
+      ],
+      updatedAt: 'Just now'
+    }
+  ];
+
+  scenarios = defaultScenarios;
+  scenarioCounter = 4;
+  selectedScenarioId = 1;
+
+  // Save to localStorage
+  saveScenarios();
+
+  // Render UI
+  renderScenarioList();
+  renderQuickScenarioList();
+  selectScenario(1);
+
+  console.log('Default scenarios created');
+}
+
 function initializeScenarios() {
+  // Load scenarios from localStorage first
+  loadScenarios();
+
+  // Render quick scenario list in Automation tab
+  renderQuickScenarioList();
+
+  // Initialize Quick Run event listeners
+  initializeQuickRunScenarioListeners();
+
+  // Render scenario list in Scenarios tab
+  renderScenarioList();
+
+  // Select the first scenario or last selected
+  if (scenarios.length > 0) {
+    selectScenario(selectedScenarioId || scenarios[0].id);
+  } else {
+    // Create default scenarios if none exist
+    createDefaultScenarios();
+  }
+
   // Scenario list items
   document.querySelectorAll('.scenario-item').forEach(item => {
     item.addEventListener('click', () => selectScenario(parseInt(item.dataset.id)));
@@ -410,6 +633,13 @@ function initializeScenarios() {
     });
   });
 
+  // Toggle switch event listeners for new options
+  document.getElementById('loopOptions').addEventListener('change', handleLoopOptionsToggle);
+  document.getElementById('triggerByTelegram').addEventListener('change', handleTriggerByTelegramToggle);
+
+  // Setup stop running scenario button
+  setupStopRunningScenarioButton();
+
   // Keyboard shortcuts for scenarios
   document.addEventListener('keydown', handleScenarioKeyboardShortcuts);
 }
@@ -425,9 +655,9 @@ function selectIcon(option) {
 function openNewScenarioModal() {
   document.getElementById('newScenarioName').value = '';
   document.getElementById('newScenarioDescription').value = '';
-  selectedIcon = '📁';
+  selectedIcon = '';
   document.querySelectorAll('.icon-option').forEach(opt => {
-    opt.classList.toggle('selected', opt.dataset.icon === '📁');
+    opt.classList.toggle('selected', opt.dataset.icon === '');
   });
   document.getElementById('newScenarioModal').classList.add('active');
 }
@@ -456,13 +686,19 @@ function confirmCreateScenario() {
     repeatCount: 1,
     actionDelay: 500,
     movementSpeed: 'normal',
-    takeScreenshots: true,
+    loopOptions: false,
+    triggerByTelegram: false,
     actions: [],
     updatedAt: 'Just now'
   };
 
   scenarios.push(newScenario);
+
+  // Save to localStorage
+  saveScenarios();
+
   renderScenarioList();
+  renderQuickScenarioList();
   selectScenario(newId);
   closeNewScenarioModal();
   showToast('Scenario created successfully', 'success');
@@ -478,6 +714,7 @@ function selectScenario(id) {
   // Update list selection
   document.querySelectorAll('.scenario-item').forEach(item => {
     item.classList.toggle('active', parseInt(item.dataset.id) === id);
+    
   });
 
   // Update details panel
@@ -488,7 +725,13 @@ function selectScenario(id) {
   document.getElementById('repeatCount').value = scenario.repeatCount;
   document.getElementById('actionDelay').value = scenario.actionDelay;
   document.getElementById('movementSpeed').value = scenario.movementSpeed;
-  document.getElementById('scenarioScreenshots').checked = scenario.takeScreenshots;
+
+  // Load new toggle options
+  document.getElementById('loopOptions').checked = scenario.loopOptions || false;
+  document.getElementById('triggerByTelegram').checked = scenario.triggerByTelegram || false;
+
+  // Update repeat count input state based on loop options
+  updateRepeatCountState();
 
   // Render actions
   renderScenarioActions(scenario.actions);
@@ -501,7 +744,7 @@ function renderScenarioActions(actions) {
   if (!actions || actions.length === 0) {
     container.innerHTML = `
       <div class="empty-state" style="text-align: center; padding: 40px; color: var(--text-muted);">
-        <span style="font-size: 48px; display: block; margin-bottom: 12px;">📭</span>
+        <span style="font-size: 48px; display: block; margin-bottom: 12px;">📋</span>
         <p>No actions yet. Click "Add Action" to create one.</p>
       </div>
     `;
@@ -511,8 +754,8 @@ function renderScenarioActions(actions) {
   container.innerHTML = actions.map((action, index) => `
     <div class="scenario-action-item" data-action-id="${action.id}">
       <span class="action-order">${index + 1}</span>
-      <span class="action-type">${action.type}</span>
-      <span class="action-details">${action.details}</span>
+      <span class="action-type">${getActionIcon(action.type)}</span>
+      <span class="action-details">${action.name}</span>
       <div class="action-controls">
         <button class="row-action-btn edit" title="Edit">✏️</button>
         <button class="row-action-btn delete" title="Delete">🗑️</button>
@@ -547,7 +790,8 @@ function createNewScenario() {
     repeatCount: 1,
     actionDelay: 500,
     movementSpeed: 'normal',
-    takeScreenshots: true,
+    loopOptions: false,
+    triggerByTelegram: false,
     actions: [],
     updatedAt: 'Just now'
   };
@@ -568,10 +812,15 @@ function saveScenario() {
   scenario.repeatCount = parseInt(document.getElementById('repeatCount').value);
   scenario.actionDelay = parseInt(document.getElementById('actionDelay').value);
   scenario.movementSpeed = document.getElementById('movementSpeed').value;
-  scenario.takeScreenshots = document.getElementById('scenarioScreenshots').checked;
+  scenario.loopOptions = document.getElementById('loopOptions').checked;
+  scenario.triggerByTelegram = document.getElementById('triggerByTelegram').checked;
   scenario.updatedAt = 'Just now';
 
+  // Save to localStorage
+  saveScenarios();
+
   renderScenarioList();
+  renderQuickScenarioList();
   showToast('Scenario saved successfully', 'success');
 }
 
@@ -590,7 +839,12 @@ function duplicateScenario() {
   };
 
   scenarios.push(newScenario);
+
+  // Save to localStorage
+  saveScenarios();
+
   renderScenarioList();
+  renderQuickScenarioList();
   selectScenario(newId);
   showToast('Scenario duplicated', 'success');
 }
@@ -608,7 +862,12 @@ function deleteScenario() {
   if (confirm(`Are you sure you want to delete "${scenario.name}"?`)) {
     scenarios = scenarios.filter(s => s.id !== selectedScenarioId);
     selectedScenarioId = scenarios[0].id;
+
+    // Save to localStorage
+    saveScenarios();
+
     renderScenarioList();
+    renderQuickScenarioList();
     selectScenario(selectedScenarioId);
     showToast('Scenario deleted', 'success');
   }
@@ -619,7 +878,7 @@ function renderScenarioList() {
   const container = document.getElementById('scenarioList');
   container.innerHTML = scenarios.map(scenario => `
     <div class="scenario-item ${scenario.id === selectedScenarioId ? 'active' : ''}" data-id="${scenario.id}">
-      <span class="scenario-icon">${scenario.icon}</span>
+      <span class="scenario-icon">${scenario.icon || '📁'}</span>
       <div class="scenario-info">
         <span class="scenario-name">${scenario.name}</span>
         <span class="scenario-meta">${scenario.actions.length} actions • Updated ${scenario.updatedAt}</span>
@@ -633,29 +892,403 @@ function renderScenarioList() {
   });
 }
 
+// ===========================================
+// SCENARIO EXECUTION FUNCTIONS
+// ===========================================
+
+// Start Scenario Execution
+function startScenarioExecution(scenarioId) {
+  const scenario = scenarios.find(s => s.id === scenarioId);
+  if (!scenario) return;
+
+  // Check if automation is running
+  if (!isAutomationRunning) {
+    showToast('⚠️ Please turn ON Automation first in the main tab', 'warning');
+    return;
+  }
+
+  // Check if scenario has actions
+  if (!scenario.actions || scenario.actions.length === 0) {
+    showToast('This scenario has no actions', 'warning');
+    return;
+  }
+
+  // Check if another scenario is already running
+  if (runningScenarioId && runningScenarioId !== scenarioId) {
+    showToast('Another scenario is already running. Please stop it first.', 'warning');
+    return;
+  }
+
+  // Set running state
+  runningScenarioId = scenarioId;
+  currentActionIndex = 0;
+  loopIterationCount = 0;
+
+  // Set repeat count (default to 1 if not set or invalid)
+  totalRepeatCount = Math.max(1, parseInt(scenario.repeatCount) || 1);
+  currentRepeatCount = 1;
+
+  // Update UI to show running state
+  const runBtn = document.getElementById('runScenarioBtn');
+  const testBtn = document.getElementById('testRunScenarioBtn');
+  const stopBtn = document.getElementById('stopScenarioBtn');
+
+  if (runBtn) runBtn.style.display = 'none';
+  if (testBtn) testBtn.style.display = 'none';
+  if (stopBtn) stopBtn.style.display = 'flex';
+
+  // Show running scenario banner in Automation tab
+  showRunningScenarioBanner(scenario);
+
+  // Update Quick Run list to show running state
+  updateQuickScenarioListState(scenarioId);
+
+  showToast(`Started: ${scenario.name}`, 'success');
+
+  // Start executing actions
+  executeNextAction();
+}
+
+// Execute Next Action in the scenario
+async function executeNextAction() {
+  const scenario = scenarios.find(s => s.id === runningScenarioId);
+  if (!scenario) return;
+
+  // Check if all actions have been executed
+  if (currentActionIndex >= scenario.actions.length) {
+    // Check if we should loop or repeat
+    if (scenario.loopOptions) {
+      // Infinite loop mode
+      loopIterationCount++;
+
+      // Update progress to show completion
+      updateScenarioProgress(scenario.actions.length, scenario.actions.length);
+
+      if (loopIterationCount === 1) {
+        showToast(`${scenario.name} - First loop completed. Continuing...`, 'info');
+      } else {
+        showToast(`${scenario.name} - Loop #${loopIterationCount} completed. Continuing...`, 'info');
+      }
+
+      // Delay 1 second before next loop iteration
+      await delay(1000);
+
+      // Restart from beginning
+      currentActionIndex = 0;
+
+      // Start next iteration
+      executeNextAction();
+    } else if (currentRepeatCount < totalRepeatCount) {
+      // Repeat mode: run scenario multiple times
+      currentRepeatCount++;
+
+      // Update progress to show completion of this repeat
+      updateScenarioProgress(scenario.actions.length, scenario.actions.length);
+
+      const remainingRepeats = totalRepeatCount - currentRepeatCount + 1;
+      showToast(`${scenario.name} - Repeat ${currentRepeatCount - 1}/${totalRepeatCount - 1} completed. ${remainingRepeats} more to go...`, 'info');
+
+      // Delay between repeats (using actionDelay or default 1 second)
+      const repeatDelay = scenario.actionDelay || 1000;
+      await delay(repeatDelay);
+
+      // Restart from beginning for next repeat
+      currentActionIndex = 0;
+
+      // Start next repeat
+      executeNextAction();
+    } else {
+      // All repeats completed
+      completeScenarioExecution();
+    }
+    return;
+  }
+
+  const action = scenario.actions[currentActionIndex];
+
+  // Update progress
+  updateScenarioProgress(currentActionIndex, scenario.actions.length);
+
+  // Execute action based on type
+  try {
+    await executeAction(action);
+    currentActionIndex++;
+
+    // Delay between actions
+    setTimeout(executeNextAction, scenario.actionDelay || 500);
+  } catch (error) {
+    console.error('Action execution error:', error);
+    showToast(`Error in action: ${action.name}`, 'error');
+    stopScenarioExecution();
+  }
+}
+
+// Execute a single action
+async function executeAction(action) {
+  switch (action.type) {
+    case 'delay':
+      await delay(action.parameters.durationMs || 1000);
+      break;
+
+    case 'mouseMove':
+      await window.electronAPI.executeMouseMove({
+        x: action.parameters.x,
+        y: action.parameters.y
+      });
+      break;
+
+    case 'mouseClick':
+      await window.electronAPI.executeMouseClick({
+        x: action.parameters.x,
+        y: action.parameters.y,
+        button: action.parameters.button || 'left',
+        clickCount: action.parameters.clickCount || 1
+      });
+      break;
+
+    case 'typeText':
+      await window.electronAPI.executeTypeText({
+        text: action.parameters.text,
+        delayPerCharMs: action.parameters.delayPerCharMs || 0
+      });
+      break;
+
+    case 'keyPress':
+      await window.electronAPI.executeKeyPress({
+        key: action.parameters.key
+      });
+      break;
+
+    case 'hotkey':
+      await window.electronAPI.executeHotkey({
+        keys: action.parameters.keys
+      });
+      break;
+
+    case 'launchApp':
+      await window.electronAPI.launchApp({
+        executablePath: action.parameters.executablePath,
+        arguments: action.parameters.arguments
+      });
+      break;
+
+    case 'activateWindow':
+      await window.electronAPI.activateWindow({
+        titleContains: action.parameters.titleContains,
+        processName: action.parameters.processName
+      });
+      break;
+
+    case 'screenshotRegion':
+      await window.electronAPI.screenshotRegion({
+        x: action.parameters.x,
+        y: action.parameters.y,
+        width: action.parameters.width,
+        height: action.parameters.height,
+        savePath: action.parameters.savePath
+      });
+      break;
+
+    case 'setClipboard':
+      // Set clipboard (handled via IPC)
+      console.log('Set clipboard:', action.parameters.text);
+      break;
+
+    case 'readClipboard':
+      // Read clipboard (handled via IPC)
+      console.log('Read clipboard to:', action.parameters.saveToVariable);
+      break;
+
+    case 'waitUntilClipboardChanges':
+      await delay(action.parameters.timeoutMs || 10000);
+      // Would need to poll clipboard in real implementation
+      break;
+
+    case 'waitUntilPixelColor':
+      await delay(action.parameters.timeoutMs || 5000);
+      // Would need to check pixel color in real implementation
+      break;
+
+    case 'if':
+      // Conditional execution (would need variable system)
+      console.log('If condition:', action.parameters.condition);
+      break;
+
+    case 'loop':
+      // Loop handling is done in executeNextAction
+      console.log('Loop:', action.parameters.count, action.parameters.condition);
+      break;
+
+    default:
+      console.log('Unknown action type:', action.type);
+  }
+}
+
+// Helper function to delay execution
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Complete Scenario Execution
+function completeScenarioExecution() {
+  const scenario = scenarios.find(s => s.id === runningScenarioId);
+  if (scenario) {
+    showToast(`${scenario.name} - Completed!`, 'success');
+  }
+
+  // Reset UI
+  hideRunningScenarioBanner();
+  updateQuickScenarioListState(null);
+
+  runningScenarioId = null;
+  currentActionIndex = 0;
+
+  // Show run buttons again
+  const runBtn = document.getElementById('runScenarioBtn');
+  const testBtn = document.getElementById('testRunScenarioBtn');
+  const stopBtn = document.getElementById('stopScenarioBtn');
+
+  if (runBtn) runBtn.style.display = 'flex';
+  if (testBtn) testBtn.style.display = 'flex';
+  if (stopBtn) stopBtn.style.display = 'none';
+}
+
+// Stop Scenario Execution
+function stopScenarioExecution() {
+  const scenario = scenarios.find(s => s.id === runningScenarioId);
+  if (scenario) {
+    showToast(`${scenario.name} - Stopped`, 'info');
+  }
+
+  // Reset UI
+  hideRunningScenarioBanner();
+  updateQuickScenarioListState(null);
+
+  runningScenarioId = null;
+  currentActionIndex = 0;
+
+  // Show run buttons again
+  const runBtn = document.getElementById('runScenarioBtn');
+  const testBtn = document.getElementById('testRunScenarioBtn');
+  const stopBtn = document.getElementById('stopScenarioBtn');
+
+  if (runBtn) runBtn.style.display = 'flex';
+  if (testBtn) testBtn.style.display = 'flex';
+  if (stopBtn) stopBtn.style.display = 'none';
+}
+
+// Show Running Scenario Banner
+function showRunningScenarioBanner(scenario) {
+  const banner = document.getElementById('runningScenarioBanner');
+  const nameEl = document.getElementById('runningScenarioName');
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('scenarioProgressFill');
+
+  if (banner) {
+    banner.style.display = 'flex';
+  }
+
+  if (nameEl) {
+    if (scenario.loopOptions) {
+      nameEl.innerHTML = `${scenario.icon} ${scenario.name} <span style="font-size: 12px; color: #fbbf24;">🔄 INFINITE LOOP</span>`;
+    } else if (scenario.repeatCount > 1) {
+      nameEl.innerHTML = `${scenario.icon} ${scenario.name} <span style="font-size: 12px; color: #60a5fa;">🔁 ${scenario.repeatCount}x REPEAT</span>`;
+    } else {
+      nameEl.textContent = `${scenario.icon} ${scenario.name}`;
+    }
+  }
+
+  if (progressText) {
+    progressText.textContent = `0 / ${scenario.actions.length} actions`;
+  }
+
+  if (progressFill) {
+    progressFill.style.width = '0%';
+  }
+}
+
+// Hide Running Scenario Banner
+function hideRunningScenarioBanner() {
+  const banner = document.getElementById('runningScenarioBanner');
+  if (banner) {
+    banner.style.display = 'none';
+  }
+}
+
+// Update Scenario Progress
+let loopIterationCount = 0;
+let currentRepeatCount = 1;
+let totalRepeatCount = 1;
+
+function updateScenarioProgress(current, total) {
+  const scenario = scenarios.find(s => s.id === runningScenarioId);
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('scenarioProgressFill');
+
+  if (progressText) {
+    if (scenario && scenario.loopOptions) {
+      progressText.textContent = `🔄 Loop #${loopIterationCount + 1} - ${current + 1} / ${total} actions`;
+    } else if (scenario && totalRepeatCount > 1) {
+      progressText.textContent = `🔁 Repeat ${currentRepeatCount}/${totalRepeatCount} - ${current + 1} / ${total} actions`;
+    } else {
+      progressText.textContent = `${current + 1} / ${total} actions`;
+    }
+  }
+
+  if (progressFill) {
+    const percentage = ((current + 1) / total) * 100;
+    progressFill.style.width = `${percentage}%`;
+  }
+}
+
+// Update Quick Scenario List State
+function updateQuickScenarioListState(runningId) {
+  document.querySelectorAll('.quick-scenario-item').forEach(item => {
+    const itemId = parseInt(item.dataset.id);
+    const runBtn = item.querySelector('.qs-run-btn');
+
+    if (itemId === runningId) {
+      item.classList.add('running');
+      if (runBtn) {
+        runBtn.innerHTML = '⏹️ Stop';
+        runBtn.disabled = false;
+      }
+    } else {
+      item.classList.remove('running');
+      if (runBtn) {
+        runBtn.innerHTML = '▶️ Run';
+        runBtn.disabled = runningId !== null; // Disable if another scenario is running
+      }
+    }
+  });
+}
+
+// Stop Running Scenario Button Handler
+function setupStopRunningScenarioButton() {
+  const stopBtn = document.getElementById('stopRunningScenarioBtn');
+  if (stopBtn) {
+    stopBtn.addEventListener('click', () => {
+      stopScenarioExecution();
+    });
+  }
+}
+
+// ===========================================
+// SCENARIO UI FUNCTIONS
+// ===========================================
+
 // Run Scenario
 function runScenario() {
   const scenario = scenarios.find(s => s.id === selectedScenarioId);
   if (!scenario) return;
 
-  const runBtn = document.getElementById('runScenarioBtn');
-  const testBtn = document.getElementById('testRunScenarioBtn');
-  const stopBtn = document.getElementById('stopScenarioBtn');
+  if (scenario.actions.length === 0) {
+    showToast('This scenario has no actions', 'warning');
+    return;
+  }
 
-  runBtn.style.display = 'none';
-  testBtn.style.display = 'none';
-  stopBtn.style.display = 'flex';
-
-  showToast(`Running scenario: ${scenario.name}`, 'info');
-
-  // TODO: Implement actual scenario execution
-  // This would involve IPC calls to the main process to control mouse/keyboard
-
-  // Simulate running
-  setTimeout(() => {
-    stopScenario();
-    showToast('Scenario completed successfully', 'success');
-  }, 3000);
+  // Start scenario execution
+  startScenarioExecution(selectedScenarioId);
 }
 
 // Test Run Scenario
@@ -669,41 +1302,13 @@ function testRunScenario() {
 
 // Stop Scenario
 function stopScenario() {
-  const runBtn = document.getElementById('runScenarioBtn');
-  const testBtn = document.getElementById('testRunScenarioBtn');
-  const stopBtn = document.getElementById('stopScenarioBtn');
-
-  runBtn.style.display = 'flex';
-  testBtn.style.display = 'flex';
-  stopBtn.style.display = 'none';
-
-  showToast('Scenario execution stopped', 'info');
+  stopScenarioExecution();
 }
 
 // Add Action to Scenario
 function addActionToScenario() {
-  const scenario = scenarios.find(s => s.id === selectedScenarioId);
-  if (!scenario) return;
-
-  const actionTypes = [
-    { icon: '🖱️', label: 'Mouse Click', prefix: 'Click at ' },
-    { icon: '👆', label: 'Mouse Move', prefix: 'Move to ' },
-    { icon: '➡️', label: 'Key Press', prefix: 'Press key: ' },
-    { icon: '⌨️', label: 'Type Text', prefix: 'Type: ' },
-    { icon: '⏱️', label: 'Wait', prefix: 'Wait ' },
-    { icon: '📸', label: 'Screenshot', prefix: 'Take screenshot' }
-  ];
-
-  const newAction = {
-    id: Date.now(),
-    type: '🖱️',
-    details: 'New action'
-  };
-
-  scenario.actions.push(newAction);
-  renderScenarioActions(scenario.actions);
-  renderScenarioList();
-  showToast('Action added. Click edit to configure.', 'info');
+  // Open the Add Action modal instead of adding a placeholder
+  openAddActionModal();
 }
 
 // Edit Scenario Action
@@ -715,12 +1320,8 @@ function editScenarioAction(actionItem) {
   const action = scenario.actions.find(a => a.id === actionId);
   if (!action) return;
 
-  const newDetails = prompt('Edit action details:', action.details);
-  if (newDetails !== null && newDetails.trim()) {
-    action.details = newDetails.trim();
-    renderScenarioActions(scenario.actions);
-    showToast('Action updated', 'success');
-  }
+  // Open the add action modal in edit mode with pre-filled values
+  openAddActionModal(action);
 }
 
 // Delete Scenario Action
@@ -729,11 +1330,758 @@ function deleteScenarioAction(actionItem) {
   const scenario = scenarios.find(s => s.id === selectedScenarioId);
   if (!scenario) return;
 
-  if (confirm('Delete this action?')) {
+  const action = scenario.actions.find(a => a.id === actionId);
+  if (!action) return;
+
+  // Show action details in delete modal
+  const deleteConfirmDetails = document.getElementById('deleteConfirmDetails');
+  deleteConfirmDetails.innerHTML = `
+    <div class="detail-row">
+      <span class="detail-icon">${getActionIcon(action.type)}</span>
+      <span class="detail-text">${action.name}</span>
+    </div>
+  `;
+
+  // Show modal
+  const deleteConfirmModal = document.getElementById('deleteConfirmModal');
+  deleteConfirmModal.classList.add('active');
+
+  // Handle confirm
+  const confirmBtn = document.getElementById('confirmDeleteBtn');
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+  newConfirmBtn.addEventListener('click', () => {
     scenario.actions = scenario.actions.filter(a => a.id !== actionId);
+
+    // Save to localStorage
+    saveScenarios();
+
     renderScenarioActions(scenario.actions);
     renderScenarioList();
+    renderQuickScenarioList();
+    deleteConfirmModal.classList.remove('active');
     showToast('Action deleted', 'success');
+  });
+
+  // Handle cancel
+  const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+  const newCancelBtn = cancelDeleteBtn.cloneNode(true);
+  cancelDeleteBtn.parentNode.replaceChild(newCancelBtn, cancelDeleteBtn);
+
+  newCancelBtn.addEventListener('click', () => {
+    deleteConfirmModal.classList.remove('active');
+  });
+
+  // Close on background click
+  deleteConfirmModal.addEventListener('click', (e) => {
+    if (e.target === deleteConfirmModal) {
+      deleteConfirmModal.classList.remove('active');
+    }
+  });
+}
+
+// ===========================================
+// ADD ACTION MODAL FUNCTIONALITY
+// ===========================================
+
+// Action Type Definitions
+const ACTION_TYPES = {
+  // Control Flow
+  delay: {
+    name: 'Delay',
+    icon: '⏱️',
+    description: 'Pause execution for a fixed duration',
+    parameters: [
+      { key: 'durationMs', label: 'Duration (milliseconds)', type: 'number', required: true, min: 0, default: 1000, help: 'Pause execution for this duration' }
+    ]
+  },
+  if: {
+    name: 'If Condition',
+    icon: '🔀',
+    description: 'Conditionally execute following actions',
+    parameters: [
+      { key: 'condition', label: 'Condition', type: 'textarea', required: true, placeholder: 'e.g., variable.name == "expected_value"', help: 'JavaScript expression that evaluates to true/false' }
+    ]
+  },
+  loop: {
+    name: 'Loop',
+    icon: '🔄',
+    description: 'Repeat actions',
+    parameters: [
+      { key: 'count', label: 'Repeat Count', type: 'number', required: false, min: 1, placeholder: 'Leave empty for infinite loop', help: 'Number of times to repeat' },
+      { key: 'condition', label: 'Stop Condition', type: 'textarea', required: false, placeholder: 'e.g., counter >= 10', help: 'Optional: stop when this condition is true' }
+    ]
+  },
+  // Application / Window
+  launchApp: {
+    name: 'Launch App',
+    icon: '🚀',
+    description: 'Launch a desktop application',
+    parameters: [
+      { key: 'executablePath', label: 'Executable Path', type: 'file', required: true, placeholder: 'C:\\Program Files\\App\\app.exe', accept: '.exe,.app,.bat,.sh', help: 'Path to the application executable' },
+      { key: 'arguments', label: 'Arguments (Optional)', type: 'text', required: false, placeholder: '--arg1 value1 --arg2 value2', help: 'Optional command line arguments' }
+    ]
+  },
+  activateWindow: {
+    name: 'Activate Window',
+    icon: '🪟',
+    description: 'Bring an existing window to the foreground',
+    parameters: [
+      { key: 'titleContains', label: 'Window Title Contains', type: 'text', required: false, placeholder: 'e.g., Chrome - My Document', help: 'Part of the window title to match' },
+      { key: 'processName', label: 'Process Name', type: 'text', required: false, placeholder: 'e.g., chrome.exe', help: 'Name of the process' }
+    ],
+    validate: (values) => {
+      const errors = [];
+      if (!values.titleContains && !values.processName) {
+        errors.push('At least one of Window Title or Process Name is required');
+      }
+      return errors;
+    }
+  },
+  // Mouse
+  mouseMove: {
+    name: 'Move Mouse',
+    icon: '🎯',
+    description: 'Move mouse cursor to screen coordinates',
+    parameters: [
+      { key: 'x', label: 'X Coordinate', type: 'number', required: true, min: 0, help: 'Horizontal screen position (pixels)' },
+      { key: 'y', label: 'Y Coordinate', type: 'number', required: true, min: 0, help: 'Vertical screen position (pixels)' }
+    ]
+  },
+  mouseClick: {
+    name: 'Click Mouse',
+    icon: '👆',
+    description: 'Click mouse at screen coordinates',
+    parameters: [
+      { key: 'x', label: 'X Coordinate', type: 'number', required: true, min: 0, help: 'Horizontal screen position' },
+      { key: 'y', label: 'Y Coordinate', type: 'number', required: true, min: 0, help: 'Vertical screen position' },
+      { key: 'button', label: 'Mouse Button', type: 'select', required: true, options: [
+        { value: 'left', label: 'Left Button' },
+        { value: 'right', label: 'Right Button' },
+        { value: 'middle', label: 'Middle Button' }
+      ], default: 'left' },
+      { key: 'clickCount', label: 'Click Count', type: 'number', required: true, min: 1, max: 10, default: 1, help: 'Number of times to click' }
+    ]
+  },
+  // Keyboard
+  typeText: {
+    name: 'Type Text',
+    icon: '📝',
+    description: 'Type text at current cursor location',
+    parameters: [
+      { key: 'text', label: 'Text to Type', type: 'textarea', required: true, placeholder: 'Hello, World!', help: 'Text that will be typed at current cursor position' },
+      { key: 'delayPerCharMs', label: 'Delay per Character (ms)', type: 'number', required: false, min: 0, default: 0, help: 'Optional delay between each character' }
+    ]
+  },
+  keyPress: {
+    name: 'Press Key',
+    icon: '🔘',
+    description: 'Press a single keyboard key',
+    parameters: [
+      { key: 'key', label: 'Key', type: 'text', required: true, placeholder: 'Enter, Escape, a, 1, F5...', help: 'Key name (case-insensitive)' }
+    ]
+  },
+  hotkey: {
+    name: 'Hotkey',
+    icon: '🎹',
+    description: 'Press multiple keys together',
+    parameters: [
+      { key: 'keys', label: 'Keys Combination', type: 'text', required: true, placeholder: 'ctrl+c, alt+tab, shift+enter', help: 'Keys to press together, separated by "+"' }
+    ]
+  },
+  // Clipboard
+  setClipboard: {
+    name: 'Set Clipboard',
+    icon: '📥',
+    description: 'Set clipboard text',
+    parameters: [
+      { key: 'text', label: 'Text Content', type: 'textarea', required: true, placeholder: 'Text to copy to clipboard', help: 'Text that will be copied to clipboard' }
+    ]
+  },
+  readClipboard: {
+    name: 'Read Clipboard',
+    icon: '📤',
+    description: 'Read clipboard and store it in a variable',
+    parameters: [
+      { key: 'saveToVariable', label: 'Variable Name', type: 'text', required: true, placeholder: 'clipboardContent', help: 'Name of variable to store clipboard content' }
+    ]
+  },
+  // Wait / Synchronization
+  waitUntilClipboardChanges: {
+    name: 'Wait Clipboard Change',
+    icon: '🔃',
+    description: 'Wait until clipboard content changes',
+    parameters: [
+      { key: 'timeoutMs', label: 'Timeout (milliseconds)', type: 'number', required: true, min: 100, default: 10000, help: 'Maximum time to wait before timing out' }
+    ]
+  },
+  waitUntilPixelColor: {
+    name: 'Wait Pixel Color',
+    icon: '🎨',
+    description: 'Wait until a pixel matches a color',
+    parameters: [
+      { key: 'x', label: 'X Coordinate', type: 'number', required: true, min: 0, help: 'Horizontal screen position' },
+      { key: 'y', label: 'Y Coordinate', type: 'number', required: true, min: 0, help: 'Vertical screen position' },
+      { key: 'colorHex', label: 'Expected Color (Hex)', type: 'text', required: true, pattern: '^#[0-9A-Fa-f]{6}$', placeholder: '#FF5733', help: 'Hex color code (e.g., #FF5733)' },
+      { key: 'timeoutMs', label: 'Timeout (milliseconds)', type: 'number', required: true, min: 100, default: 5000, help: 'Maximum time to wait' }
+    ]
+  },
+  // Screen Capture
+  screenshotRegion: {
+    name: 'Screenshot Region',
+    icon: '📷',
+    description: 'Capture part of the screen',
+    parameters: [
+      { key: 'x', label: 'Start X', type: 'number', required: true, min: 0, help: 'Starting X coordinate' },
+      { key: 'y', label: 'Start Y', type: 'number', required: true, min: 0, help: 'Starting Y coordinate' },
+      { key: 'width', label: 'Width', type: 'number', required: true, min: 1, help: 'Width of capture region' },
+      { key: 'height', label: 'Height', type: 'number', required: true, min: 1, help: 'Height of capture region' },
+      { key: 'savePath', label: 'Save Path (Optional)', type: 'file', required: false, accept: '.png,.jpg,.jpeg', placeholder: 'Leave empty for auto-generated path', help: 'Path to save screenshot, or leave empty' }
+    ]
+  }
+};
+
+// Get action icon by type
+function getActionIcon(type) {
+  const actionType = ACTION_TYPES[type];
+  return actionType ? actionType.icon : '❓';
+}
+
+// Get action name by type
+function getActionName(type) {
+  const actionType = ACTION_TYPES[type];
+  return actionType ? actionType.name : type;
+}
+
+// Add Action Modal State
+let addActionModalState = {
+  selectedType: null,
+  actionName: '',
+  parameters: {},
+  errors: [],
+  editingActionId: null  // Track if we're editing an existing action
+};
+
+// Initialize Add Action Modal
+function initializeAddActionModal() {
+  const actionTypeSelect = document.getElementById('actionTypeSelect');
+  const actionNameInput = document.getElementById('actionNameInput');
+  const confirmAddActionBtn = document.getElementById('confirmAddActionBtn');
+  const cancelAddActionBtn = document.getElementById('cancelAddActionBtn');
+  const closeAddActionModalBtn = document.getElementById('closeAddActionModalBtn');
+  const addActionModal = document.getElementById('addActionModal');
+
+  // Action type change
+  actionTypeSelect.addEventListener('change', (e) => {
+    const selectedType = e.target.value;
+    addActionModalState.selectedType = selectedType || null;
+    addActionModalState.parameters = {};
+
+    // Reset name
+    actionNameInput.value = '';
+
+    // Render parameter form
+    renderActionParametersForm(selectedType);
+
+    // Update preview
+    updateActionPreview();
+
+    // Validate
+    validateAddActionForm();
+  });
+
+  // Action name input
+  actionNameInput.addEventListener('input', (e) => {
+    addActionModalState.actionName = e.target.value;
+    updateActionPreview();
+    validateAddActionForm();
+  });
+
+  // Confirm add action
+  confirmAddActionBtn.addEventListener('click', confirmAddAction);
+
+  // Cancel add action
+  cancelAddActionBtn.addEventListener('click', closeAddActionModal);
+
+  // Close modal button
+  closeAddActionModalBtn.addEventListener('click', closeAddActionModal);
+
+  // Close on background click
+  addActionModal.addEventListener('click', (e) => {
+    if (e.target === addActionModal) {
+      closeAddActionModal();
+    }
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', handleAddActionKeyboardShortcuts);
+}
+
+// Open Add Action Modal
+function openAddActionModal(action = null) {
+  // Reset state
+  addActionModalState = {
+    selectedType: null,
+    actionName: '',
+    parameters: {},
+    errors: [],
+    editingActionId: action ? action.id : null
+  };
+
+  // Reset form
+  document.getElementById('actionTypeSelect').value = '';
+  document.getElementById('actionNameInput').value = '';
+  document.getElementById('actionParametersForm').innerHTML = '<p class="no-parameters-message">Select an action type to see available parameters.</p>';
+  document.getElementById('actionPreviewCard').querySelector('.preview-icon').textContent = '❓';
+  document.getElementById('previewType').textContent = 'No action selected';
+  document.getElementById('previewName').textContent = '-';
+  document.getElementById('previewParams').textContent = '-';
+  document.getElementById('actionValidationErrors').classList.remove('visible');
+  document.getElementById('confirmAddActionBtn').disabled = true;
+
+  // Update modal title and button based on mode
+  const modalTitle = document.querySelector('#addActionModal .modal-header h3');
+  const confirmBtn = document.getElementById('confirmAddActionBtn');
+
+  if (action) {
+    // Edit mode
+    modalTitle.textContent = 'Edit Action';
+    confirmBtn.textContent = 'Save Changes';
+    confirmBtn.disabled = false;
+
+    // Pre-fill with existing action data
+    if (action.type) {
+      document.getElementById('actionTypeSelect').value = action.type;
+      addActionModalState.selectedType = action.type;
+      renderActionParametersForm(action.type);
+
+      // Set parameters after form is rendered
+      setTimeout(() => {
+        if (action.parameters) {
+          Object.keys(action.parameters).forEach(key => {
+            const input = document.getElementById(`param_${key}`);
+            if (input) {
+              input.value = action.parameters[key];
+              addActionModalState.parameters[key] = action.parameters[key];
+            }
+          });
+        }
+        updateActionPreview();
+        validateAddActionForm();
+      }, 50);
+    }
+
+    if (action.name) {
+      document.getElementById('actionNameInput').value = action.name;
+      addActionModalState.actionName = action.name;
+    }
+  } else {
+    // Add mode
+    modalTitle.textContent = 'Add New Action';
+    confirmBtn.textContent = 'Add Action';
+  }
+
+  // Show modal
+  document.getElementById('addActionModal').classList.add('active');
+
+  // Focus on appropriate element
+  if (action && action.type) {
+    setTimeout(() => {
+      document.getElementById('actionNameInput').focus();
+    }, 100);
+  } else {
+    setTimeout(() => {
+      document.getElementById('actionTypeSelect').focus();
+    }, 100);
+  }
+}
+
+// Close Add Action Modal
+function closeAddActionModal() {
+  document.getElementById('addActionModal').classList.remove('active');
+}
+
+// Render Action Parameters Form
+function renderActionParametersForm(actionType) {
+  const container = document.getElementById('actionParametersForm');
+
+  if (!actionType) {
+    container.innerHTML = '<p class="no-parameters-message">Select an action type to see available parameters.</p>';
+    return;
+  }
+
+  const actionConfig = ACTION_TYPES[actionType];
+  if (!actionConfig) {
+    container.innerHTML = '<p class="no-parameters-message">Unknown action type.</p>';
+    return;
+  }
+
+  let html = '';
+
+  actionConfig.parameters.forEach(param => {
+    const paramId = `param_${param.key}`;
+
+    html += `<div class="param-form-group" data-param="${param.key}">`;
+
+    if (param.type === 'number') {
+      html += `
+        <label for="${paramId}">
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <input type="number" id="${paramId}"
+               min="${param.min || ''}"
+               max="${param.max || ''}"
+               placeholder="${param.placeholder || ''}"
+               value="${param.default || ''}">
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
+    } else if (param.type === 'text') {
+      html += `
+        <label for="${paramId}">
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <input type="text" id="${paramId}"
+               placeholder="${param.placeholder || ''}"
+               value="${param.default || ''}">
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
+    } else if (param.type === 'textarea') {
+      html += `
+        <label for="${paramId}">
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <textarea id="${paramId}"
+                  rows="3"
+                  placeholder="${param.placeholder || ''}">${param.default || ''}</textarea>
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
+    } else if (param.type === 'select') {
+      html += `
+        <label for="${paramId}">
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <select id="${paramId}">
+          ${param.options.map(opt => `<option value="${opt.value}" ${opt.value === param.default ? 'selected' : ''}>${opt.label}</option>`).join('')}
+        </select>
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
+    } else if (param.type === 'file') {
+      html += `
+        <label for="${paramId}">
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <input type="text" id="${paramId}"
+               placeholder="${param.placeholder || ''}"
+               value="${param.default || ''}">
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
+    }
+
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
+
+  // Add event listeners to inputs
+  actionConfig.parameters.forEach(param => {
+    const input = document.getElementById(`param_${param.key}`);
+    if (input) {
+      input.addEventListener('input', () => {
+        addActionModalState.parameters[param.key] = input.value;
+        validateActionParam(param, input);
+        updateActionPreview();
+        validateAddActionForm();
+      });
+    }
+  });
+
+  // Store validation function for later use
+  addActionModalState.validateFn = actionConfig.validate;
+}
+
+// Validate a single action parameter
+function validateActionParam(param, input) {
+  const errorEl = input.parentElement.querySelector('.param-error');
+  const value = input.value.trim();
+  let error = null;
+
+  // Check required
+  if (param.required && !value) {
+    error = 'This field is required';
+  }
+  // Check number constraints
+  else if (param.type === 'number') {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) {
+      error = 'Must be a valid number';
+    } else if (param.min !== undefined && numValue < param.min) {
+      error = `Must be at least ${param.min}`;
+    } else if (param.max !== undefined && numValue > param.max) {
+      error = `Must not exceed ${param.max}`;
+    }
+  }
+  // Check pattern
+  else if (param.pattern && value && !new RegExp(param.pattern).test(value)) {
+    if (param.pattern === '^#[0-9A-Fa-f]{6}$') {
+      error = 'Must be valid hex color (e.g., #FF5733)';
+    }
+  }
+
+  // Update error display
+  if (error && errorEl) {
+    errorEl.textContent = error;
+    errorEl.classList.add('visible');
+    input.style.borderColor = 'var(--danger-color)';
+  } else {
+    if (errorEl) {
+      errorEl.classList.remove('visible');
+    }
+    input.style.borderColor = '';
+  }
+
+  return error === null;
+}
+
+// Update Action Preview
+function updateActionPreview() {
+  const previewIcon = document.getElementById('previewIcon');
+  const previewType = document.getElementById('previewType');
+  const previewName = document.getElementById('previewName');
+  const previewParams = document.getElementById('previewParams');
+
+  const { selectedType, actionName, parameters } = addActionModalState;
+
+  if (!selectedType) {
+    previewIcon.textContent = '❓';
+    previewType.textContent = 'No action selected';
+    previewName.textContent = '-';
+    previewParams.textContent = '-';
+    return;
+  }
+
+  const actionConfig = ACTION_TYPES[selectedType];
+  previewIcon.textContent = actionConfig.icon;
+  previewType.textContent = actionConfig.name;
+  previewName.textContent = actionName || 'Unnamed Action';
+
+  // Generate parameters summary
+  const paramSummary = Object.entries(parameters)
+    .filter(([key, value]) => value && value.trim())
+    .map(([key, value]) => {
+      // Format key name
+      const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+      // Truncate long values
+      const formattedValue = value.length > 30 ? value.substring(0, 30) + '...' : value;
+      return `${formattedKey}: ${formattedValue}`;
+    })
+    .join(' | ');
+
+  previewParams.textContent = paramSummary || 'No parameters set';
+}
+
+// Validate Add Action Form
+function validateAddActionForm() {
+  const { selectedType, actionName, parameters } = addActionModalState;
+  const errors = [];
+
+  // Check action type
+  if (!selectedType) {
+    errors.push('Please select an action type');
+  }
+
+  // Check action name
+  if (!actionName.trim()) {
+    errors.push('Please enter an action name');
+  } else if (actionName.length > 100) {
+    errors.push('Action name must be 100 characters or less');
+  }
+
+  // Check required parameters
+  if (selectedType) {
+    const actionConfig = ACTION_TYPES[selectedType];
+    if (actionConfig) {
+      actionConfig.parameters.forEach(param => {
+        if (param.required) {
+          const value = parameters[param.key];
+          if (!value || !value.trim()) {
+            errors.push(`${param.label} is required`);
+          }
+        }
+      });
+    }
+  }
+
+  // Custom validation
+  if (addActionModalState.validateFn) {
+    const customErrors = addActionModalState.validateFn(parameters);
+    if (customErrors && customErrors.length > 0) {
+      errors.push(...customErrors);
+    }
+  }
+
+  // Display errors
+  const errorContainer = document.getElementById('actionValidationErrors');
+  if (errors.length > 0) {
+    errorContainer.innerHTML = `<ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>`;
+    errorContainer.classList.add('visible');
+  } else {
+    errorContainer.classList.remove('visible');
+  }
+
+  // Update button state
+  const confirmBtn = document.getElementById('confirmAddActionBtn');
+  confirmBtn.disabled = errors.length > 0;
+
+  addActionModalState.errors = errors;
+
+  return errors.length === 0;
+}
+
+// Confirm Add/Edit Action
+function confirmAddAction() {
+  if (!validateAddActionForm()) {
+    return;
+  }
+
+  const { selectedType, actionName, parameters, editingActionId } = addActionModalState;
+
+  const scenario = scenarios.find(s => s.id === selectedScenarioId);
+  if (!scenario) return;
+
+  if (editingActionId) {
+    // Edit existing action
+    const actionIndex = scenario.actions.findIndex(a => a.id === editingActionId);
+    if (actionIndex !== -1) {
+      scenario.actions[actionIndex] = {
+        ...scenario.actions[actionIndex],
+        type: selectedType,
+        name: actionName.trim(),
+        parameters: { ...parameters }
+      };
+
+      // Save to localStorage
+      saveScenarios();
+
+      renderScenarioActions(scenario.actions);
+      renderScenarioList();
+      renderQuickScenarioList();
+      closeAddActionModal();
+      showToast('Action updated successfully', 'success');
+    }
+  } else {
+    // Create new action object
+    const newAction = {
+      id: Date.now(),
+      type: selectedType,
+      name: actionName.trim(),
+      parameters: { ...parameters }
+    };
+
+    // Add to current scenario
+    scenario.actions.push(newAction);
+
+    // Save to localStorage
+    saveScenarios();
+
+    renderScenarioActions(scenario.actions);
+    renderScenarioList();
+    renderQuickScenarioList();
+    closeAddActionModal();
+    showToast('Action added successfully', 'success');
+  }
+}
+
+// Handle keyboard shortcuts for Add Action modal
+function handleAddActionKeyboardShortcuts(e) {
+  const addActionModal = document.getElementById('addActionModal');
+
+  if (!addActionModal.classList.contains('active')) {
+    return;
+  }
+
+  // Escape to close modal
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeAddActionModal();
+  }
+
+  // Ctrl/Cmd + Enter to confirm
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    const confirmBtn = document.getElementById('confirmAddActionBtn');
+    if (!confirmBtn.disabled) {
+      confirmAddAction();
+    }
+  }
+}
+
+// Update Add Action handler in initializeScenarios
+const originalInitializeScenarios = initializeScenarios;
+initializeScenarios = function() {
+  originalInitializeScenarios();
+  initializeAddActionModal();
+};
+
+// Override addActionToScenario to open modal
+const originalAddActionToScenario = addActionToScenario;
+addActionToScenario = function() {
+  openAddActionModal();
+};
+
+// Update Repeat Count Input State based on Loop Options
+function updateRepeatCountState() {
+  const loopOptionsEnabled = document.getElementById('loopOptions').checked;
+  const repeatCountInput = document.getElementById('repeatCount');
+
+  if (loopOptionsEnabled) {
+    repeatCountInput.disabled = true;
+    repeatCountInput.style.opacity = '0.5';
+    repeatCountInput.style.cursor = 'not-allowed';
+  } else {
+    repeatCountInput.disabled = false;
+    repeatCountInput.style.opacity = '1';
+    repeatCountInput.style.cursor = 'default';
+  }
+}
+
+// Handle Loop Options Toggle
+function handleLoopOptionsToggle(e) {
+  const loopOptionsEnabled = e.target.checked;
+
+  // Update repeat count state
+  updateRepeatCountState();
+
+  // Show toast notification
+  if (loopOptionsEnabled) {
+    showToast('Loop options enabled - Repeat Count will be frozen', 'info');
+  } else {
+    showToast('Loop options disabled', 'info');
+  }
+}
+
+// Handle Trigger By Telegram Toggle
+function handleTriggerByTelegramToggle(e) {
+  const triggerEnabled = e.target.checked;
+  const loopOptionsToggle = document.getElementById('loopOptions');
+
+  if (triggerEnabled) {
+    // When Trigger By Telegram is enabled, Loop Options must also be enabled
+    loopOptionsToggle.checked = true;
+    updateRepeatCountState();
+    showToast('Trigger By Telegram enabled - Scenario will run on Telegram message', 'info');
+  } else {
+    showToast('Trigger By Telegram disabled', 'info');
   }
 }
 
@@ -853,7 +2201,7 @@ async function autoConnectTelegram() {
       // Add a notification to the list
       addNotificationToList({
         title: 'Auto-connected to Telegram Bot',
-        icon: '✅',
+        icon: '',
         status: 'success'
       });
     } else {
@@ -956,7 +2304,7 @@ async function testTelegramConnection() {
 
   const btn = document.getElementById('testConnectionBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span>⏳</span> Testing...';
+  btn.innerHTML = '<span></span> Testing...';
 
   try {
     // Test connection via IPC
@@ -980,7 +2328,7 @@ async function testTelegramConnection() {
       // Add a test notification to the list
       addNotificationToList({
         title: 'Bot connected successfully',
-        icon: '✅',
+        icon: '',
         status: 'success'
       });
     } else {
@@ -995,7 +2343,7 @@ async function testTelegramConnection() {
     updateTelegramStatusCard();
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<span>🔗</span> Test Connection';
+    btn.innerHTML = ' Test Connection';
   }
 }
 
@@ -1036,7 +2384,7 @@ function disconnectTelegram() {
     // Add a notification
     addNotificationToList({
       title: 'Bot disconnected',
-      icon: '👋',
+      icon: '',
       status: 'success'
     });
   }
@@ -1063,7 +2411,7 @@ function addNotificationToList(notification) {
   const notificationItem = document.createElement('div');
   notificationItem.className = 'notification-item';
   notificationItem.innerHTML = `
-    <div class="notification-icon">${notification.icon || '📢'}</div>
+    <div class="notification-icon">${notification.icon || ''}</div>
     <div class="notification-content">
       <div class="notification-title">${notification.title}</div>
       <div class="notification-time">${timeString}</div>
@@ -1095,7 +2443,7 @@ async function sendTelegramNotification(message) {
     // Add to notifications list
     addNotificationToList({
       title: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
-      icon: '📨',
+      icon: '',
       status: 'success'
     });
   } catch (error) {
@@ -1223,7 +2571,7 @@ function renderMessagesTable() {
   if (pageMessages.length === 0) {
     tbody.innerHTML = `
       <tr class="empty-table-row">
-        <td colspan="5">
+        <td colspan="6">
           <div class="empty-state">
             <span style="font-size: 48px; display: block; margin-bottom: 12px;">📭</span>
             <p>No incoming messages yet.</p>
@@ -1237,20 +2585,21 @@ function renderMessagesTable() {
   tbody.innerHTML = pageMessages.map(msg => {
     const time = new Date(msg.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     const date = new Date(msg.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const messageContent = msg.content.length > 70 ? msg.content.substring(0, 70) + '...' : msg.content;
+    const messageContent = msg.content.length > 100 ? msg.content.substring(0, 100) + '...' : msg.content;
     const messageTypeIcon = getMessageTypeIcon(msg.type);
 
     return `
       <tr class="${msg.unread ? 'unread' : ''}" data-message-id="${msg.id}">
-        <td class="td-time">
-          <span class="message-time">${time}</span>
-          <span class="message-date">${date}</span>
-        </td>
+        <td class="td-id">${msg.id}</td>
         <td class="td-sender">
           <span class="sender-name">${escapeHtml(msg.sender)}</span>
           <span class="sender-username">${escapeHtml(msg.username || '')}</span>
         </td>
         <td class="td-content" title="${escapeHtml(msg.content)}">${escapeHtml(messageContent)}</td>
+        <td class="td-time">
+          <span class="message-time">${time}</span>
+          <span class="message-date">${date}</span>
+        </td>
         <td class="td-type">
           <span class="message-type-badge ${msg.type}">
             ${messageTypeIcon} ${msg.type}
@@ -1268,11 +2617,11 @@ function renderMessagesTable() {
 // Get Message Type Icon
 function getMessageTypeIcon(type) {
   switch (type) {
-    case 'text': return '📝';
-    case 'command': return '⚡';
-    case 'photo': return '🖼️';
-    case 'document': return '📄';
-    default: return '❓';
+    case 'text': return '';
+    case 'command': return 'G';
+    case 'photo': return '+n+';
+    case 'document': return '';
+    default: return 'G';
   }
 }
 
@@ -1302,7 +2651,7 @@ async function refreshMessages() {
 
   btn.disabled = true;
   const originalContent = btn.innerHTML;
-  btn.innerHTML = '<span>⏳</span> Refreshing...';
+  btn.innerHTML = '<span>G</span> Refreshing...';
 
   try {
     // In a real implementation, this would poll the Telegram API
@@ -1340,21 +2689,24 @@ async function checkForNewMessages() {
       // Update offset for next poll
       telegramOffset = result.offset;
 
-      // Add new messages to the list
-      const newMessages = result.updates.map(update => ({
-        id: update.id,
-        time: update.time,
-        sender: update.sender,
-        username: update.username,
-        content: update.content,
-        type: update.type,
-        unread: true
-      }));
+      // Only accept text messages
+      const newMessages = result.updates
+        .filter(update => update.type === 'text' || update.text)
+        .map(update => ({
+          id: update.id,
+          time: update.time,
+          sender: update.sender,
+          username: update.username,
+          content: update.text || update.content,
+          type: 'text',
+          unread: true
+        }));
 
-      // Add new messages to the beginning of the list
-      incomingMessages = [...newMessages, ...incomingMessages];
+      // Only add if there are new text messages
+      if (newMessages.length > 0) {
+        incomingMessages = [...newMessages, ...incomingMessages];
+      }
 
-      // Limit total messages
       if (incomingMessages.length > 100) {
         incomingMessages = incomingMessages.slice(0, 100);
       }
@@ -1372,24 +2724,23 @@ function clearAllMessages() {
     incomingMessages = [];
     messagePage = 1;
     saveMessages();
-    renderMessagesTable();
+    renderMessagesTable();    
     showToast('All messages cleared', 'success');
   }
 }
 
-// Delete single message
 function deleteMessage(messageId) {
   if (confirm('Delete this message?')) {
     incomingMessages = incomingMessages.filter(msg => msg.id !== messageId);
     saveMessages();
 
-    // Adjust page if necessary
     const totalPages = Math.ceil(incomingMessages.length / messagesPerPage);
     if (messagePage > totalPages && totalPages > 0) {
       messagePage = totalPages;
     }
 
     renderMessagesTable();
+
     showToast('Message deleted', 'success');
   }
 }
@@ -1424,7 +2775,7 @@ function startMessagePolling() {
       await checkForNewMessages();
       renderMessagesTable();
     }
-  }, 30000);
+  }, 5000);
 }
 
 // Stop message polling
@@ -1467,10 +2818,6 @@ function updateTelegramStatusCard() {
 window.replyToMessage = replyToMessage;
 window.deleteMessage = deleteMessage;
 
-// Initialize on DOM ready
-document.addEventListener('DOMContentLoaded', () => {
-  initializeEventListeners();
-  updateStats();
-  initializeTelegramSettings();
-  initializeIncomingMessages();
-});
+
+
+

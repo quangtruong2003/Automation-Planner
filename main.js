@@ -5,8 +5,8 @@ let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
+    width: 1800,
+    height: 900,
     minWidth: 800,
     minHeight: 500,
     frame: false,
@@ -91,8 +91,11 @@ ipcMain.handle('execute-type-text', async (event, { text }) => {
 ipcMain.handle('execute-wait', async (event, { duration }) => {
   // TODO: Implement wait
   console.log(`Wait: ${duration}ms`);
+
   await new Promise(resolve => setTimeout(resolve, duration));
   return { success: true };
+
+  
 });
 
 ipcMain.handle('take-screenshot', async (event, { path }) => {
@@ -109,10 +112,9 @@ ipcMain.handle('maximize-window', () => {
   if (mainWindow.isMaximized()) {
     mainWindow.unmaximize();
   } else {
-    mainWindow.maximize();
+    mainWindow.maximize();    
   }
 });
-
 ipcMain.handle('close-window', () => {
   mainWindow.close();
 });
@@ -180,6 +182,7 @@ ipcMain.handle('send-telegram-message', async (event, { token, chatId, message }
   } catch (error) {
     console.error('Telegram send message error:', error);
     return { success: false, error: error.message || 'Failed to send message' };
+
   }
 });
 
@@ -298,17 +301,18 @@ ipcMain.handle('reply-telegram-message', async (event, { token, chatId, messageI
         parse_mode: 'HTML'
       })
     });
-
-    const result = await response.json();
+  
+    const result = await response.json();            
 
     if (result.ok) {
       return { success: true, messageId: result.result.message_id };
+      
     } else {
-      return { success: false, error: result.description || 'Failed to reply' };
+      return { success: false, error: result.description || 'Failed to reply' };      
     }
   } catch (error) {
     console.error('Telegram reply error:', error);
+
     return { success: false, error: error.message || 'Failed to reply' };
   }
 });
-

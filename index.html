@@ -89,8 +89,8 @@
           </div>
 
           <div class="automation-grid">
-            <!-- Left Column: Settings -->
-            <div class="settings-section">
+            <!-- Left Column: Settings (Temporarily Hidden) -->
+            <div class="settings-section" style="display: none;">
               <h3>Automation Settings</h3>
               <div class="setting-item">
                 <label class="setting-label">
@@ -133,23 +133,23 @@
 
             <!-- Right Column: Quick Select Scenario -->
             <div class="quick-scenario-section">
-              <h3> Quick Run Scenario</h3>
+              <h3>Quick Run Scenario</h3>
               <p class="section-hint">Select a scenario to run directly</p>
               <div class="quick-scenario-list" id="quickScenarioList">
                 <div class="quick-scenario-item" data-id="1">
-                  <span class="qs-icon"></span>
+                  <span class="qs-icon">🎮</span>
                   <span class="qs-name">Login Flow</span>
                   <span class="qs-actions">5 actions</span>
                   <button class="qs-run-btn">▶️ Run</button>
                 </div>
                 <div class="quick-scenario-item" data-id="2">
-                  <span class="qs-icon"></span>
+                  <span class="qs-icon">🛒</span>
                   <span class="qs-name">Checkout Process</span>
                   <span class="qs-actions">4 actions</span>
                   <button class="qs-run-btn">▶️ Run</button>
                 </div>
                 <div class="quick-scenario-item" data-id="3">
-                  <span class="qs-icon"></span>
+                  <span class="qs-icon">📝</span>
                   <span class="qs-name">Form Filling</span>
                   <span class="qs-actions">2 actions</span>
                   <button class="qs-run-btn">▶️ Run</button>
@@ -360,12 +360,20 @@
                   <span class="setting-hint">Mouse movement speed</span>
                 </div>
                 <div class="setting-card">
-                  <h4><span class="setting-icon">📸</span> Screenshot</h4>
+                  <h4><span class="setting-icon">🔄</span> Loop Options</h4>
                   <label class="switch">
-                    <input type="checkbox" id="scenarioScreenshots" checked>
+                    <input type="checkbox" id="loopOptions">
                     <span class="slider"></span>
                   </label>
-                  <span class="setting-hint">Take screenshots during playback</span>
+                  <span class="setting-hint">Enable scenario looping</span>
+                </div>
+                <div class="setting-card">
+                  <h4><span class="setting-icon">📨</span> Trigger By Telegram</h4>
+                  <label class="switch">
+                    <input type="checkbox" id="triggerByTelegram">
+                    <span class="slider"></span>
+                  </label>
+                  <span class="setting-hint">Run when Telegram message received</span>
                 </div>
               </div>
 
@@ -496,10 +504,10 @@
               <span class="form-hint">A friendly name to identify this bot</span>
             </div>
 
-            <!-- Notification Settings -->
-            <h4 class="subsection-title">Notification Settings</h4>
+            <!-- Notification Settings (Temporarily Hidden) -->
+            <h4 class="subsection-title" style="display: none;">Notification Settings</h4>
 
-            <div class="notify-settings-grid">
+            <div class="notify-settings-grid" style="display: none;">
               <div class="notify-setting-card">
                 <div class="notify-setting-header">
                   <span class="notify-setting-icon"></span>
@@ -632,9 +640,10 @@
               <table class="messages-table">
                 <thead>
                   <tr>
-                    <th class="th-time">Time</th>
+                    <th class="th-id">Id</th>
                     <th class="th-sender">Sender</th>
                     <th class="th-content">Message Content</th>
+                    <th class="th-time">Time</th>
                     <th class="th-type">Type</th>
                     <th class="th-actions">Actions</th>
                   </tr>
@@ -715,7 +724,7 @@
   <div class="modal" id="editActionModal">
     <div class="modal-content edit-action-modal-content">
       <div class="modal-header">
-        <h3>✏️ Edit Action</h3>
+        <h3>✏️Edit Action</h3>
         <button class="modal-close" id="closeEditActionModalBtn">✕</button>
       </div>
       <div class="modal-body edit-action-modal-body">
@@ -772,6 +781,92 @@
         <div class="modal-actions delete-modal-actions">
           <button class="action-btn" id="cancelDeleteBtn">Cancel</button>
           <button class="action-btn danger" id="confirmDeleteBtn">🗑️ Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Action Modal -->
+  <div class="modal" id="addActionModal">
+    <div class="modal-content add-action-modal-content">
+      <div class="modal-header">
+        <h3>Add New Action</h3>
+        <button class="modal-close" id="closeAddActionModalBtn">✕</button>
+      </div>
+      <div class="modal-body add-action-modal-body">
+        <!-- Action Type Selection -->
+        <div class="form-group">
+          <label>Action Type <span class="required-mark">*</span></label>
+          <select id="actionTypeSelect" class="action-select">
+            <option value="">Select an action type...</option>
+            <optgroup label="⚡ Control Flow">
+              <option value="delay">⏱️ Delay</option>
+              <option value="if">🔀 If Condition</option>
+              <option value="loop">🔄 Loop</option>
+            </optgroup>
+            <optgroup label="📱 Application / Window">
+              <option value="launchApp">🚀 Launch App</option>
+              <option value="activateWindow">🪟 Activate Window</option>
+            </optgroup>
+            <optgroup label="🖱️ Mouse">
+              <option value="mouseMove">🎯 Move Mouse</option>
+              <option value="mouseClick">👆 Click Mouse</option>
+            </optgroup>
+            <optgroup label="⌨️ Keyboard">
+              <option value="typeText">📝 Type Text</option>
+              <option value="keyPress">🔘 Press Key</option>
+              <option value="hotkey">🎹 Hotkey</option>
+            </optgroup>
+            <optgroup label="📋 Clipboard">
+              <option value="setClipboard">📥 Set Clipboard</option>
+              <option value="readClipboard">📤 Read Clipboard</option>
+            </optgroup>
+            <optgroup label="⏳ Wait / Sync">
+              <option value="waitUntilClipboardChanges">🔃 Wait Clipboard Change</option>
+              <option value="waitUntilPixelColor">🎨 Wait Pixel Color</option>
+            </optgroup>
+            <optgroup label="🖼️ Screen Capture">
+              <option value="screenshotRegion">📷 Screenshot Region</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <!-- Action Name -->
+        <div class="form-group">
+          <label>Action Name <span class="required-mark">*</span></label>
+          <input type="text" id="actionNameInput" placeholder="Enter a descriptive name for this action">
+        </div>
+
+        <!-- Dynamic Parameters Section -->
+        <div id="actionParametersSection" class="action-parameters-section">
+          <h4 class="parameters-title">Parameters</h4>
+          <div id="actionParametersForm" class="action-parameters-form">
+            <!-- Dynamic form fields will be rendered here -->
+            <p class="no-parameters-message">Select an action type to see available parameters.</p>
+          </div>
+        </div>
+
+        <!-- Action Preview -->
+        <div class="action-preview-section">
+          <h4 class="preview-title">Preview</h4>
+          <div class="action-preview-card" id="actionPreviewCard">
+            <div class="preview-icon" id="previewIcon">❓</div>
+            <div class="preview-content">
+              <span class="preview-type" id="previewType">No action selected</span>
+              <span class="preview-name" id="previewName">-</span>
+              <span class="preview-params" id="previewParams">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Validation Errors -->
+        <div id="actionValidationErrors" class="validation-errors">
+          <!-- Validation error messages will be displayed here -->
+        </div>
+
+        <div class="modal-actions">
+          <button class="action-btn" id="cancelAddActionBtn">Cancel</button>
+          <button class="action-btn primary" id="confirmAddActionBtn" disabled>Add Action</button>
         </div>
       </div>
     </div>
