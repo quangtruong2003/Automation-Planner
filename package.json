@@ -7,13 +7,39 @@
     "start": "electron .",
     "build": "electron-builder"
   },
-  "keywords": ["automation", "electron", "planning"],
+  "keywords": [
+    "automation",
+    "electron",
+    "planning"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.0.0"
+    "electron": "^28.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "uiohook-napi": "^1.5.4"
+  },
+  "build": {
+    "appId": "com.automation.planner",
+    "productName": "Automation Planner",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false
+    },
+    "files": [
+      "**/*",
+      "!node_modules/*"
+    ],
+    "directories": {
+      "output": "dist"
+    }
   }
 }
-
-
-

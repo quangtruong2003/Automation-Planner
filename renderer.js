@@ -38,7 +38,110 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeTelegramSettings();
   initializeIncomingMessages();
   initializeScenarios(); // Initialize scenarios after DOM is ready
+
+  // Set up coordinate recording listeners
+  setupCoordinateRecordingListeners();
 });
+
+// Coordinate Recording Event Listeners
+function setupCoordinateRecordingListeners() {
+  if (window.electronAPI && window.electronAPI.onCoordinateCaptured) {
+    window.electronAPI.onCoordinateCaptured((coordinates) => {
+      console.log('Coordinates captured:', coordinates);
+    });
+  }
+
+  if (window.electronAPI && window.electronAPI.onCoordinateCountUpdate) {
+    window.electronAPI.onCoordinateCountUpdate((count) => {
+      console.log('Coordinate count:', count);
+      // Update the status element if recording
+      if (addActionModalState.isRecordingCoordinates) {
+        const statusEl = document.getElementById(`param_x_status`);
+        if (statusEl) {
+          const countEl = statusEl.querySelector('.coord-count');
+          if (countEl) countEl.textContent = `${count} position${count !== 1 ? 's' : ''} captured`;
+        }
+      }
+    });
+  }
+
+  // Listen for captured coordinates when recording stops
+  if (window.electronAPI && window.electronAPI.onCoordinateCaptured) {
+    window.electronAPI.onCoordinateCaptured((coordinates) => {
+      console.log('Coordinates captured:', coordinates);
+      addActionModalState.recordedCoordinates = coordinates || [];
+    });
+  }
+
+  // Listen for recording stopped by keyboard (Enter key)
+  if (window.electronAPI && window.electronAPI.onCoordinateRecordingStopped) {
+    window.electronAPI.onCoordinateRecordingStopped((data) => {
+      console.log('Recording stopped by keyboard, coordinates:', data);
+      addActionModalState.isRecordingCoordinates = false;
+      addActionModalState.recordedCoordinates = data || [];
+
+      // Update all recording buttons and their associated displays
+      document.querySelectorAll('.record-coordinate-btn').forEach(btn => {
+        const btnIcon = btn.querySelector('.record-icon');
+        const btnText = btn.querySelector('.record-text');
+        const mode = btn.dataset.mode || 'single';
+        const isMulti = mode === 'multi';
+        const paramKey = btn.dataset.param;
+
+        // Reset button to not recording state
+        if (btnIcon) btnIcon.textContent = '🔴';
+        if (btnText) btnText.textContent = isMulti ? 'Start Recording' : 'Record';
+        btn.dataset.recording = 'false';
+
+        // Update the coordinates display
+        if (paramKey && addActionModalState.recordedCoordinates.length > 0) {
+          const listEl = document.getElementById(`param_${paramKey}_list`);
+          const input = document.getElementById(`param_${paramKey}`);
+          const clearBtn = document.querySelector(`.clear-coordinates-btn[data-param="${paramKey}"]`);
+
+          if (isMulti && listEl) {
+            // Display all recorded coordinates
+            listEl.innerHTML = `<div class="coordinates-items">${addActionModalState.recordedCoordinates.map((c, i) => `<div class="coordinate-item"><span class="coord-index">${i + 1}.</span> <span class="coord-value">X: ${c.x}, Y: ${c.y}</span></div>`).join('')}</div>`;
+            listEl.style.display = 'block';
+            if (clearBtn) clearBtn.style.display = 'inline-flex';
+
+            // Store as JSON string
+            addActionModalState.parameters[paramKey] = JSON.stringify(addActionModalState.recordedCoordinates);
+            if (input) input.value = JSON.stringify(addActionModalState.recordedCoordinates);
+          } else if (!isMulti && input) {
+            // Single coordinate - use the last one
+            const lastCoord = addActionModalState.recordedCoordinates[addActionModalState.recordedCoordinates.length - 1];
+            input.value = JSON.stringify(lastCoord);
+            addActionModalState.parameters[paramKey] = JSON.stringify(lastCoord);
+          }
+        }
+      });
+
+      // Hide all recording status indicators
+      document.querySelectorAll('.recording-status').forEach(status => {
+        status.style.display = 'none';
+      });
+
+      // Update coordinate count display
+      const statusEl = document.getElementById(`param_x_status`);
+      if (statusEl) {
+        const countEl = statusEl.querySelector('.coord-count');
+        if (countEl) {
+          countEl.textContent = `${addActionModalState.recordedCoordinates.length} position${addActionModalState.recordedCoordinates.length !== 1 ? 's' : ''} captured`;
+        }
+      }
+
+      // Validate and update preview
+      validateAddActionForm();
+      updateActionPreview();
+
+      // Show success toast
+      if (addActionModalState.recordedCoordinates.length > 0) {
+        showToast(`Recorded ${addActionModalState.recordedCoordinates.length} position(s)`, 'success');
+      }
+    });
+  }
+}
 
 // Event Listeners
 function initializeEventListeners() {
@@ -211,6 +314,24 @@ async function stopAutomation() {
     const result = await window.electronAPI.stopAutomation();
     if (result.success) {
       isAutomationRunning = false;
+
+      // Stop any running scenarios
+      if (runningScenarioId) {
+        stopScenarioExecution();
+
+        // Clear telegram clipboard if processing
+        if (currentTelegramMessage) {
+          window.electronAPI.clearClipboard();
+          currentTelegramMessage = null;
+        }
+
+        // Clear telegram message queue
+        if (telegramMessageQueue.length > 0) {
+          telegramMessageQueue = [];
+          isProcessingTelegramQueue = false;
+          showToast('Telegram message queue cleared', 'info');
+        }
+      }
 
       // Update UI
       automationToggle.classList.remove('stop');
@@ -730,8 +851,31 @@ function selectScenario(id) {
   document.getElementById('loopOptions').checked = scenario.loopOptions || false;
   document.getElementById('triggerByTelegram').checked = scenario.triggerByTelegram || false;
 
-  // Update repeat count input state based on loop options
-  updateRepeatCountState();
+  // Update disabled states based on telegram trigger setting
+  const loopOptionsToggle = document.getElementById('loopOptions');
+  const repeatCountInput = document.getElementById('repeatCount');
+
+  if (scenario.triggerByTelegram) {
+    // When telegram trigger is enabled, disable loopOptions and repeatCount
+    loopOptionsToggle.checked = false;
+    loopOptionsToggle.disabled = true;
+    loopOptionsToggle.parentElement.classList.add('disabled');
+
+    repeatCountInput.disabled = true;
+    repeatCountInput.style.opacity = '0.5';
+    repeatCountInput.style.cursor = 'not-allowed';
+  } else {
+    // When telegram trigger is disabled, enable loopOptions and repeatCount
+    loopOptionsToggle.disabled = false;
+    loopOptionsToggle.parentElement.classList.remove('disabled');
+
+    repeatCountInput.disabled = false;
+    repeatCountInput.style.opacity = '1';
+    repeatCountInput.style.cursor = 'default';
+
+    // Update repeat count input state based on loop options
+    updateRepeatCountState();
+  }
 
   // Render actions
   renderScenarioActions(scenario.actions);
@@ -752,7 +896,8 @@ function renderScenarioActions(actions) {
   }
 
   container.innerHTML = actions.map((action, index) => `
-    <div class="scenario-action-item" data-action-id="${action.id}">
+    <div class="scenario-action-item" data-action-id="${action.id}" draggable="true" data-index="${index}">
+      <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
       <span class="action-order">${index + 1}</span>
       <span class="action-type">${getActionIcon(action.type)}</span>
       <span class="action-details">${action.name}</span>
@@ -764,6 +909,12 @@ function renderScenarioActions(actions) {
   `).join('');
 
   // Re-attach event listeners
+  setupActionItemEventListeners();
+  setupDragAndDrop();
+}
+
+// Setup event listeners for action item buttons
+function setupActionItemEventListeners() {
   document.querySelectorAll('.scenario-action-item .row-action-btn.edit').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -776,6 +927,83 @@ function renderScenarioActions(actions) {
       e.stopPropagation();
       deleteScenarioAction(btn.closest('.scenario-action-item'));
     });
+  });
+}
+
+// Setup drag and drop for action items
+function setupDragAndDrop() {
+  const container = document.getElementById('scenarioActionsList');
+  const items = container.querySelectorAll('.scenario-action-item');
+
+  items.forEach(item => {
+    item.addEventListener('dragstart', handleDragStart);
+    item.addEventListener('dragover', handleDragOver);
+    item.addEventListener('drop', handleDrop);
+    item.addEventListener('dragend', handleDragEnd);
+    item.addEventListener('dragenter', handleDragEnter);
+    item.addEventListener('dragleave', handleDragLeave);
+  });
+}
+
+let draggedItem = null;
+let draggedItemIndex = null;
+
+function handleDragStart(e) {
+  draggedItem = this;
+  draggedItemIndex = parseInt(this.dataset.index);
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', this.dataset.actionId);
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  return false;
+}
+
+function handleDragEnter(e) {
+  this.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+  this.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+  e.stopPropagation();
+  this.classList.remove('drag-over');
+
+  const droppedItem = this;
+  const droppedItemIndex = parseInt(this.dataset.index);
+
+  if (draggedItem && draggedItemIndex !== droppedItemIndex && selectedScenarioId) {
+    const scenario = scenarios.find(s => s.id === selectedScenarioId);
+    if (scenario && scenario.actions) {
+      // Remove dragged item from array
+      const [movedAction] = scenario.actions.splice(draggedItemIndex, 1);
+      // Insert at new position
+      scenario.actions.splice(droppedItemIndex, 0, movedAction);
+
+      // Re-render actions list
+      renderScenarioActions(scenario.actions);
+      saveScenarios();
+
+      showToast('Action order updated', 'success');
+    }
+  }
+
+  return false;
+}
+
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  draggedItem = null;
+  draggedItemIndex = null;
+
+  // Remove drag-over class from all items
+  document.querySelectorAll('.scenario-action-item').forEach(item => {
+    item.classList.remove('drag-over');
   });
 }
 
@@ -812,8 +1040,18 @@ function saveScenario() {
   scenario.repeatCount = parseInt(document.getElementById('repeatCount').value);
   scenario.actionDelay = parseInt(document.getElementById('actionDelay').value);
   scenario.movementSpeed = document.getElementById('movementSpeed').value;
-  scenario.loopOptions = document.getElementById('loopOptions').checked;
-  scenario.triggerByTelegram = document.getElementById('triggerByTelegram').checked;
+
+  // Handle loopOptions and triggerByTelegram relationship
+  const triggerByTelegram = document.getElementById('triggerByTelegram').checked;
+  scenario.triggerByTelegram = triggerByTelegram;
+
+  // When triggerByTelegram is enabled, loopOptions must be false
+  if (triggerByTelegram) {
+    scenario.loopOptions = false;
+  } else {
+    scenario.loopOptions = document.getElementById('loopOptions').checked;
+  }
+
   scenario.updatedAt = 'Just now';
 
   // Save to localStorage
@@ -897,7 +1135,7 @@ function renderScenarioList() {
 // ===========================================
 
 // Start Scenario Execution
-function startScenarioExecution(scenarioId) {
+function startScenarioExecution(scenarioId, triggeredByTelegram = false) {
   const scenario = scenarios.find(s => s.id === scenarioId);
   if (!scenario) return;
 
@@ -924,6 +1162,9 @@ function startScenarioExecution(scenarioId) {
   currentActionIndex = 0;
   loopIterationCount = 0;
 
+  // Auto minimize window when starting scenario
+  window.electronAPI.minimizeWindow();
+
   // Set repeat count (default to 1 if not set or invalid)
   totalRepeatCount = Math.max(1, parseInt(scenario.repeatCount) || 1);
   currentRepeatCount = 1;
@@ -942,6 +1183,21 @@ function startScenarioExecution(scenarioId) {
 
   // Update Quick Run list to show running state
   updateQuickScenarioListState(scenarioId);
+
+  // For telegram-triggered scenarios: wait for message if not triggered by telegram yet
+  if (scenario.triggerByTelegram && !triggeredByTelegram) {
+    // Set waiting for message state
+    scenario.isWaitingForMessage = true;
+    showToast(`📨 "${scenario.name}" is waiting for Telegram message...`, 'info');
+
+    // Don't execute actions yet - wait for message
+    return;
+  }
+
+  // Clear waiting state if triggered by telegram
+  if (scenario.triggerByTelegram && triggeredByTelegram) {
+    scenario.isWaitingForMessage = false;
+  }
 
   showToast(`Started: ${scenario.name}`, 'success');
 
@@ -1023,33 +1279,150 @@ async function executeNextAction() {
   }
 }
 
-// Execute a single action
+// Execute a single action using nut.js
 async function executeAction(action) {
   switch (action.type) {
+    // ===========================================
+    // CONTROL FLOW ACTIONS
+    // ===========================================
     case 'delay':
-      await delay(action.parameters.durationMs || 1000);
+      // Duration in milliseconds
+      await window.electronAPI.executeDelay({
+        durationMs: parseInt(action.parameters.durationMs) || 1000
+      });
       break;
 
-    case 'mouseMove':
-      await window.electronAPI.executeMouseMove({
-        x: action.parameters.x,
-        y: action.parameters.y
+    case 'if':
+      // Conditional execution (placeholder - would need variable system)
+      const ifResult = await window.electronAPI.executeIf({
+        condition: action.parameters.condition
       });
+      console.log('If condition result:', ifResult);
+      break;
+
+    case 'loop':
+      // Loop handling is done in executeNextAction
+      await window.electronAPI.executeLoop({
+        count: parseInt(action.parameters.count) || 1,
+        condition: action.parameters.condition
+      });
+      break;
+
+    // ===========================================
+    // APPLICATION / WINDOW ACTIONS
+    // ===========================================
+    case 'launchApp':
+      await window.electronAPI.executeLaunchApp({
+        executablePath: action.parameters.executablePath,
+        arguments: action.parameters.arguments
+      });
+      break;
+
+    case 'activateWindow':
+      await window.electronAPI.executeActivateWindow({
+        titleContains: action.parameters.titleContains,
+        processName: action.parameters.processName
+      });
+      break;
+
+    // ===========================================
+    // MOUSE ACTIONS
+    // ===========================================
+    case 'mouseMove':
+      // Handle both old format (x, y) and new format (coordinates JSON)
+      let moveCoords;
+      if (action.parameters.coordinates) {
+        const coords = typeof action.parameters.coordinates === 'string'
+          ? JSON.parse(action.parameters.coordinates)
+          : action.parameters.coordinates;
+        moveCoords = Array.isArray(coords) ? coords : [coords];
+      } else {
+        moveCoords = [{ x: parseInt(action.parameters.x) || 0, y: parseInt(action.parameters.y) || 0 }];
+      }
+
+      // Execute move for each recorded position
+      for (const coord of moveCoords) {
+        await window.electronAPI.executeMouseMove({
+          x: parseInt(coord.x) || 0,
+          y: parseInt(coord.y) || 0,
+          speed: action.parameters.speed
+        });
+        // Small delay between moves
+        await delay(100);
+      }
+
+      // Delay after completing all moves
+      if (action.parameters.delayAfterMs) {
+        await delay(parseInt(action.parameters.delayAfterMs) || 0);
+      }
       break;
 
     case 'mouseClick':
-      await window.electronAPI.executeMouseClick({
-        x: action.parameters.x,
-        y: action.parameters.y,
-        button: action.parameters.button || 'left',
-        clickCount: action.parameters.clickCount || 1
-      });
+      // Handle both old format (x, y) and new format (coordinates JSON)
+      let clickCoords;
+      if (action.parameters.coordinates) {
+        const coords = typeof action.parameters.coordinates === 'string'
+          ? JSON.parse(action.parameters.coordinates)
+          : action.parameters.coordinates;
+        clickCoords = Array.isArray(coords) ? coords : [coords];
+      } else {
+        clickCoords = [{ x: parseInt(action.parameters.x) || 0, y: parseInt(action.parameters.y) || 0 }];
+      }
+
+      // Get delay between different coordinates
+      const delayBetweenCoordsMs = parseInt(action.parameters.delayBetweenCoordsMs) || 200;
+
+      // Execute click at each recorded position
+      for (let i = 0; i < clickCoords.length; i++) {
+        const coord = clickCoords[i];
+        await window.electronAPI.executeMouseClick({
+          x: parseInt(coord.x) || 0,
+          y: parseInt(coord.y) || 0,
+          button: action.parameters.button || 'left',
+          clickCount: action.parameters.clickCount || 1
+        });
+
+        // Add delay between different coordinates (not after the last one)
+        if (i < clickCoords.length - 1 && delayBetweenCoordsMs > 0) {
+          await delay(delayBetweenCoordsMs);
+        }
+      }
+
+      // Delay after completing all clicks
+      if (action.parameters.delayAfterMs) {
+        await delay(parseInt(action.parameters.delayAfterMs) || 0);
+      }
       break;
 
+    // ===========================================
+    // KEYBOARD ACTIONS
+    // ===========================================
     case 'typeText':
+      let textToType = action.parameters.text;
+
+      // If text is empty/null/undefined, read from clipboard
+      if (!textToType || textToType.trim() === '') {
+        try {
+          const clipboardResult = await window.electronAPI.readClipboard();
+          const clipboardContent = clipboardResult && clipboardResult.content ? clipboardResult.content : '';
+
+          if (clipboardContent && clipboardContent.trim() !== '') {
+            textToType = clipboardContent;
+            console.log('TypeText: Using text from clipboard');
+          } else {
+            showToast('Clipboard is empty, cannot type text', 'warning');
+            break;
+          }
+        } catch (clipboardError) {
+          console.error('Failed to read clipboard:', clipboardError);
+          showToast('Failed to read clipboard', 'error');
+          break;
+        }
+      }
+
       await window.electronAPI.executeTypeText({
-        text: action.parameters.text,
-        delayPerCharMs: action.parameters.delayPerCharMs || 0
+        text: textToType,
+        delayPerCharMs: parseInt(action.parameters.delayPerCharMs) || 0
       });
       break;
 
@@ -1065,64 +1438,166 @@ async function executeAction(action) {
       });
       break;
 
-    case 'launchApp':
-      await window.electronAPI.launchApp({
-        executablePath: action.parameters.executablePath,
-        arguments: action.parameters.arguments
+    // ===========================================
+    // CLIPBOARD ACTIONS
+    // ===========================================
+    case 'setClipboard':
+      await window.electronAPI.executeSetClipboard({
+        text: action.parameters.text
       });
       break;
 
-    case 'activateWindow':
-      await window.electronAPI.activateWindow({
-        titleContains: action.parameters.titleContains,
-        processName: action.parameters.processName
+    case 'readClipboard':
+      const readResult = await window.electronAPI.executeReadClipboard({
+        saveToVariable: action.parameters.saveToVariable
       });
+      console.log('Read clipboard result:', readResult);
       break;
 
+    // ===========================================
+    // WAIT / SYNCHRONIZATION ACTIONS
+    // ===========================================
+    case 'waitUntilClipboardChanges':
+      const clipboardResult = await window.electronAPI.executeWaitClipboardChange({
+        timeoutMs: parseInt(action.parameters.timeoutMs) || 10000
+      });
+      console.log('Clipboard change result:', clipboardResult);
+      break;
+
+    case 'waitUntilPixelColor':
+      // Handle both old format (x, y) and new format (coordinate JSON)
+      let pixelCoord;
+      if (action.parameters.coordinate) {
+        pixelCoord = typeof action.parameters.coordinate === 'string'
+          ? JSON.parse(action.parameters.coordinate)
+          : action.parameters.coordinate;
+      } else {
+        pixelCoord = { x: parseInt(action.parameters.x) || 0, y: parseInt(action.parameters.y) || 0 };
+      }
+
+      const pixelResult = await window.electronAPI.executeWaitPixelColor({
+        x: parseInt(pixelCoord.x) || 0,
+        y: parseInt(pixelCoord.y) || 0,
+        colorHex: action.parameters.colorHex,
+        timeoutMs: parseInt(action.parameters.timeoutMs) || 5000
+      });
+      console.log('Pixel color result:', pixelResult);
+      break;
+
+    // ===========================================
+    // SCREEN CAPTURE ACTIONS
+    // ===========================================
     case 'screenshotRegion':
-      await window.electronAPI.screenshotRegion({
-        x: action.parameters.x,
-        y: action.parameters.y,
-        width: action.parameters.width,
-        height: action.parameters.height,
+      // Handle both old format (x, y, width, height) and new format (region JSON)
+      let region;
+      if (action.parameters.region) {
+        region = typeof action.parameters.region === 'string'
+          ? JSON.parse(action.parameters.region)
+          : action.parameters.region;
+      } else {
+        region = {
+          x: parseInt(action.parameters.x) || 0,
+          y: parseInt(action.parameters.y) || 0,
+          width: parseInt(action.parameters.width) || 100,
+          height: parseInt(action.parameters.height) || 100
+        };
+      }
+
+      // Full screen screenshot
+      await window.electronAPI.executeScreenshotRegion({
+        screenshotMode: 'fullscreen',
         savePath: action.parameters.savePath
       });
       break;
 
-    case 'setClipboard':
-      // Set clipboard (handled via IPC)
-      console.log('Set clipboard:', action.parameters.text);
-      break;
+    // ===========================================
+    // TELEGRAM ACTIONS
+    // ===========================================
+    case 'sendMessageToTele':
+      {
+        const messageType = action.parameters.messageType || 'text';
+        const caption = action.parameters.caption || '';
 
-    case 'readClipboard':
-      // Read clipboard (handled via IPC)
-      console.log('Read clipboard to:', action.parameters.saveToVariable);
-      break;
-
-    case 'waitUntilClipboardChanges':
-      await delay(action.parameters.timeoutMs || 10000);
-      // Would need to poll clipboard in real implementation
-      break;
-
-    case 'waitUntilPixelColor':
-      await delay(action.parameters.timeoutMs || 5000);
-      // Would need to check pixel color in real implementation
-      break;
-
-    case 'if':
-      // Conditional execution (would need variable system)
-      console.log('If condition:', action.parameters.condition);
-      break;
-
-    case 'loop':
-      // Loop handling is done in executeNextAction
-      console.log('Loop:', action.parameters.count, action.parameters.condition);
+        await window.electronAPI.executeSendMessageToTele({
+          token: telegramSettings.botToken,
+          chatId: telegramSettings.chatId,
+          customChatId: action.parameters.chatId,
+          messageType,
+          text: action.parameters.text,
+          caption
+        });
+      }
       break;
 
     default:
       console.log('Unknown action type:', action.type);
   }
 }
+
+// ===========================================
+// FIFO MESSAGE QUEUE PROCESSING (Telegram Trigger)
+// ===========================================
+
+// Add a message to the FIFO queue
+function addToTelegramQueue(message) {
+  telegramMessageQueue.push(message);
+  showToast(`📥 Message queued (${telegramMessageQueue.length} pending)`, 'info');
+}
+
+// Process the next message from the FIFO queue
+async function processNextTelegramMessage() {
+  if (telegramMessageQueue.length === 0 || !runningScenarioId) {
+    isProcessingTelegramQueue = false;
+    currentTelegramMessage = null;
+    return;
+  }
+
+  // Get the first message (FIFO)
+  currentTelegramMessage = telegramMessageQueue.shift();
+
+  if (!currentTelegramMessage) {
+    return;
+  }
+
+  showToast(`📋 Processing: "${currentTelegramMessage.content.substring(0, 30)}..."`, 'info');
+
+  // Copy message to clipboard
+  await window.electronAPI.setClipboardText(currentTelegramMessage.content);
+
+  // Clear clipboard after scenario completes (will be handled in completeScenarioExecution)
+}
+
+// Clear the clipboard after processing
+async function clearTelegramClipboard() {
+  try {
+    await window.electronAPI.clearClipboard();
+    console.log('Clipboard cleared after telegram message processing');
+  } catch (error) {
+    console.error('Failed to clear clipboard:', error);
+  }
+}
+
+// Check if we should process telegram queue
+function shouldProcessTelegramQueue() {
+  if (!runningScenarioId) return false;
+
+  const scenario = scenarios.find(s => s.id === runningScenarioId);
+  return scenario && scenario.triggerByTelegram && isAutomationRunning;
+}
+
+// Handle telegram message in queue
+async function handleTelegramMessageQueue() {
+  if (!shouldProcessTelegramQueue()) return;
+
+  if (!isProcessingTelegramQueue && telegramMessageQueue.length > 0) {
+    isProcessingTelegramQueue = true;
+    await processNextTelegramMessage();
+  }
+}
+
+// ===========================================
+// HELPER FUNCTIONS
+// ===========================================
 
 // Helper function to delay execution
 function delay(ms) {
@@ -1132,16 +1607,70 @@ function delay(ms) {
 // Complete Scenario Execution
 function completeScenarioExecution() {
   const scenario = scenarios.find(s => s.id === runningScenarioId);
-  if (scenario) {
-    showToast(`${scenario.name} - Completed!`, 'success');
+  if (!scenario) return;
+
+  const isTelegramScenario = scenario.triggerByTelegram;
+
+  // Clear clipboard if processing telegram message
+  if (currentTelegramMessage) {
+    clearTelegramClipboard();
+    currentTelegramMessage = null;
   }
+
+  // Reset execution state
+  currentActionIndex = 0;
+  loopIterationCount = 0;
+  currentRepeatCount = 1;
+
+  if (isTelegramScenario) {
+    // For telegram-triggered scenarios:
+    // 1. Complete execution
+    // 2. Set isWaitingForMessage to true to wait for next message
+    // 3. If queue has more messages, process the next one
+    // 4. If queue is empty, wait for new incoming messages
+
+    showToast(`${scenario.name} - Completed! Waiting for next message...`, 'success');
+
+    // Reset running state but keep isWaitingForMessage = true
+    runningScenarioId = null;
+
+    // Reset isWaitingForMessage so the scenario can be triggered by new messages
+    scenario.isWaitingForMessage = false;
+
+    // DO NOT clear the message queue - let remaining messages be processed
+    // Only reset processing flag
+    isProcessingTelegramQueue = false;
+
+    // If there are still messages in the queue, trigger the scenario again
+    if (telegramMessageQueue.length > 0) {
+      // Trigger the same scenario to process the next message
+      setTimeout(async () => {
+        await autoTriggerTelegramScenario(telegramMessageQueue[0]);
+      }, 500);
+    }
+
+    // Reset UI - show run buttons again
+    hideRunningScenarioBanner();
+    updateQuickScenarioListState(null);
+
+    const runBtn = document.getElementById('runScenarioBtn');
+    const testBtn = document.getElementById('testRunScenarioBtn');
+    const stopBtn = document.getElementById('stopScenarioBtn');
+
+    if (runBtn) runBtn.style.display = 'flex';
+    if (testBtn) testBtn.style.display = 'flex';
+    if (stopBtn) stopBtn.style.display = 'none';
+
+    return;
+  }
+
+  // For non-telegram scenarios
+  runningScenarioId = null;
+  showToast(`${scenario.name} - Completed!`, 'success');
 
   // Reset UI
   hideRunningScenarioBanner();
   updateQuickScenarioListState(null);
-
-  runningScenarioId = null;
-  currentActionIndex = 0;
 
   // Show run buttons again
   const runBtn = document.getElementById('runScenarioBtn');
@@ -1157,6 +1686,9 @@ function completeScenarioExecution() {
 function stopScenarioExecution() {
   const scenario = scenarios.find(s => s.id === runningScenarioId);
   if (scenario) {
+    // Reset waiting for message state
+    scenario.isWaitingForMessage = false;
+
     showToast(`${scenario.name} - Stopped`, 'info');
   }
 
@@ -1166,6 +1698,12 @@ function stopScenarioExecution() {
 
   runningScenarioId = null;
   currentActionIndex = 0;
+
+  // Clear telegram message queue if any
+  if (telegramMessageQueue.length > 0) {
+    telegramMessageQueue = [];
+    isProcessingTelegramQueue = false;
+  }
 
   // Show run buttons again
   const runBtn = document.getElementById('runScenarioBtn');
@@ -1189,7 +1727,9 @@ function showRunningScenarioBanner(scenario) {
   }
 
   if (nameEl) {
-    if (scenario.loopOptions) {
+    if (scenario.isWaitingForMessage) {
+      nameEl.innerHTML = `${scenario.icon} ${scenario.name} <span style="font-size: 12px; color: #a78bfa;">📨 WAITING FOR TELEGRAM...</span>`;
+    } else if (scenario.loopOptions) {
       nameEl.innerHTML = `${scenario.icon} ${scenario.name} <span style="font-size: 12px; color: #fbbf24;">🔄 INFINITE LOOP</span>`;
     } else if (scenario.repeatCount > 1) {
       nameEl.innerHTML = `${scenario.icon} ${scenario.name} <span style="font-size: 12px; color: #60a5fa;">🔁 ${scenario.repeatCount}x REPEAT</span>`;
@@ -1199,7 +1739,11 @@ function showRunningScenarioBanner(scenario) {
   }
 
   if (progressText) {
-    progressText.textContent = `0 / ${scenario.actions.length} actions`;
+    if (scenario.isWaitingForMessage) {
+      progressText.textContent = `Waiting for new Telegram message...`;
+    } else {
+      progressText.textContent = `0 / ${scenario.actions.length} actions`;
+    }
   }
 
   if (progressFill) {
@@ -1445,8 +1989,8 @@ const ACTION_TYPES = {
     icon: '🎯',
     description: 'Move mouse cursor to screen coordinates',
     parameters: [
-      { key: 'x', label: 'X Coordinate', type: 'number', required: true, min: 0, help: 'Horizontal screen position (pixels)' },
-      { key: 'y', label: 'Y Coordinate', type: 'number', required: true, min: 0, help: 'Vertical screen position (pixels)' }
+      { key: 'coordinates', label: 'Coordinates', type: 'coordinates', required: true, help: 'Click positions on screen', multi: true },
+      { key: 'delayAfterMs', label: 'Delay After (ms)', type: 'number', required: false, min: 0, default: 0, help: 'Delay after moving mouse (milliseconds)' }
     ]
   },
   mouseClick: {
@@ -1454,14 +1998,15 @@ const ACTION_TYPES = {
     icon: '👆',
     description: 'Click mouse at screen coordinates',
     parameters: [
-      { key: 'x', label: 'X Coordinate', type: 'number', required: true, min: 0, help: 'Horizontal screen position' },
-      { key: 'y', label: 'Y Coordinate', type: 'number', required: true, min: 0, help: 'Vertical screen position' },
+      { key: 'coordinates', label: 'Coordinates', type: 'coordinates', required: true, help: 'Click positions on screen', multi: true },
       { key: 'button', label: 'Mouse Button', type: 'select', required: true, options: [
         { value: 'left', label: 'Left Button' },
         { value: 'right', label: 'Right Button' },
         { value: 'middle', label: 'Middle Button' }
       ], default: 'left' },
-      { key: 'clickCount', label: 'Click Count', type: 'number', required: true, min: 1, max: 10, default: 1, help: 'Number of times to click' }
+      { key: 'clickCount', label: 'Click Count', type: 'number', required: true, min: 1, max: 10, default: 1, help: 'Number of times to click per coordinate' },
+      { key: 'delayBetweenCoordsMs', label: 'Delay Between Coordinates (ms)', type: 'number', required: false, min: 0, default: 200, help: 'Delay between clicking different coordinates' },
+      { key: 'delayAfterMs', label: 'Delay After (ms)', type: 'number', required: false, min: 0, default: 0, help: 'Delay after all clicks (milliseconds)' }
     ]
   },
   // Keyboard
@@ -1470,7 +2015,7 @@ const ACTION_TYPES = {
     icon: '📝',
     description: 'Type text at current cursor location',
     parameters: [
-      { key: 'text', label: 'Text to Type', type: 'textarea', required: true, placeholder: 'Hello, World!', help: 'Text that will be typed at current cursor position' },
+      { key: 'text', label: 'Text to Type', type: 'textarea', required: false, placeholder: 'Leave empty to use clipboard content', help: 'Text to type. If empty, will use clipboard content.' },
       { key: 'delayPerCharMs', label: 'Delay per Character (ms)', type: 'number', required: false, min: 0, default: 0, help: 'Optional delay between each character' }
     ]
   },
@@ -1521,23 +2066,33 @@ const ACTION_TYPES = {
     icon: '🎨',
     description: 'Wait until a pixel matches a color',
     parameters: [
-      { key: 'x', label: 'X Coordinate', type: 'number', required: true, min: 0, help: 'Horizontal screen position' },
-      { key: 'y', label: 'Y Coordinate', type: 'number', required: true, min: 0, help: 'Vertical screen position' },
+      { key: 'coordinate', label: 'Coordinate', type: 'coordinate', required: true, help: 'Click on the pixel to monitor' },
       { key: 'colorHex', label: 'Expected Color (Hex)', type: 'text', required: true, pattern: '^#[0-9A-Fa-f]{6}$', placeholder: '#FF5733', help: 'Hex color code (e.g., #FF5733)' },
       { key: 'timeoutMs', label: 'Timeout (milliseconds)', type: 'number', required: true, min: 100, default: 5000, help: 'Maximum time to wait' }
     ]
   },
   // Screen Capture
   screenshotRegion: {
-    name: 'Screenshot Region',
+    name: 'Screenshot',
     icon: '📷',
-    description: 'Capture part of the screen',
+    description: 'Capture the screen',
     parameters: [
-      { key: 'x', label: 'Start X', type: 'number', required: true, min: 0, help: 'Starting X coordinate' },
-      { key: 'y', label: 'Start Y', type: 'number', required: true, min: 0, help: 'Starting Y coordinate' },
-      { key: 'width', label: 'Width', type: 'number', required: true, min: 1, help: 'Width of capture region' },
-      { key: 'height', label: 'Height', type: 'number', required: true, min: 1, help: 'Height of capture region' },
       { key: 'savePath', label: 'Save Path (Optional)', type: 'file', required: false, accept: '.png,.jpg,.jpeg', placeholder: 'Leave empty for auto-generated path', help: 'Path to save screenshot, or leave empty' }
+    ]
+  },
+  // Telegram
+  sendMessageToTele: {
+    name: 'Send Message To Telegram',
+    icon: '📨',
+    description: 'Send text or photo to Telegram group',
+    parameters: [
+      { key: 'messageType', label: 'Message Type', type: 'select', required: true, options: [
+        { value: 'text', label: '📝 Text' },
+        { value: 'photo', label: '🖼️ Photo' }
+      ], default: 'text', help: 'Choose whether to send text or photo' },
+      { key: 'chatId', label: 'Chat ID (Optional)', type: 'text', required: false, placeholder: 'Leave empty to use default chatId', help: 'Telegram group chat ID. Uses default from Notify settings if empty.' },
+      { key: 'text', label: 'Text Content', type: 'textarea', required: false, placeholder: 'Message to send', help: 'Text message to send to Telegram', showIf: { param: 'messageType', value: 'text' } },
+      { key: 'caption', label: 'Caption (Optional)', type: 'text', required: false, placeholder: 'Add a caption to the photo', help: 'Optional caption for the photo', showIf: { param: 'messageType', value: 'photo' } }
     ]
   }
 };
@@ -1560,7 +2115,9 @@ let addActionModalState = {
   actionName: '',
   parameters: {},
   errors: [],
-  editingActionId: null  // Track if we're editing an existing action
+  editingActionId: null,  // Track if we're editing an existing action
+  isRecordingCoordinates: false,
+  recordedCoordinates: []
 };
 
 // Initialize Add Action Modal
@@ -1702,6 +2259,25 @@ function closeAddActionModal() {
   document.getElementById('addActionModal').classList.remove('active');
 }
 
+// Update visibility of dependent parameters based on showIf conditions
+function updateDependentParameterVisibility(parameters, changedParam = null, changedValue = null) {
+  parameters.forEach(param => {
+    if (param.showIf) {
+      const { param: dependParam, value: dependValue } = param.showIf;
+      const groupEl = document.querySelector(`.param-form-group[data-param="${param.key}"]`);
+      if (groupEl) {
+        // Get the current value of the dependent parameter
+        const currentValue = changedParam === dependParam
+          ? changedValue
+          : addActionModalState.parameters[dependParam];
+        const shouldShow = currentValue === dependValue;
+        groupEl.setAttribute('data-show-if', shouldShow.toString());
+        groupEl.style.display = shouldShow ? '' : 'none';
+      }
+    }
+  });
+}
+
 // Render Action Parameters Form
 function renderActionParametersForm(actionType) {
   const container = document.getElementById('actionParametersForm');
@@ -1722,7 +2298,24 @@ function renderActionParametersForm(actionType) {
   actionConfig.parameters.forEach(param => {
     const paramId = `param_${param.key}`;
 
-    html += `<div class="param-form-group" data-param="${param.key}">`;
+    // Check if this parameter should be shown based on showIf condition
+    let showIfCondition = '';
+    let showIfDataAttr = '';
+    let isVisible = true;
+
+    if (param.showIf) {
+      const { param: dependParam, value: dependValue } = param.showIf;
+      showIfCondition = `data-show-if-param="${dependParam}" data-show-if-value="${dependValue}"`;
+      showIfDataAttr = `data-show-if="true"`;
+      // Set initial visibility based on current state
+      const currentValue = addActionModalState.parameters[dependParam];
+      isVisible = currentValue === dependValue || currentValue === undefined;
+      if (!isVisible) {
+        showIfDataAttr = `data-show-if="false"`;
+      }
+    }
+
+    html += `<div class="param-form-group" data-param="${param.key}" ${showIfCondition} ${showIfDataAttr}>`;
 
     if (param.type === 'number') {
       html += `
@@ -1786,6 +2379,104 @@ function renderActionParametersForm(actionType) {
         ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
         <span class="param-error"></span>
       `;
+    } else if (param.type === 'coordinate') {
+      // Single coordinate (X, Y) with recording button
+      html += `
+        <label>
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <div class="coordinate-input-row">
+          <input type="number" id="${paramId}" readonly
+                 placeholder="Click record to capture"
+                 value="${param.default || ''}">
+          <button type="button" class="record-coordinate-btn" data-param="${param.key}" data-mode="single">
+            <span class="record-icon">🔴</span>
+            <span class="record-text">Record</span>
+          </button>
+        </div>
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
+    } else if (param.type === 'coordinates') {
+      // Multiple coordinates with recording button
+      const isMulti = param.multi === true;
+      html += `
+        <label>
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <div class="coordinates-display" id="${paramId}_display">
+          <div class="coordinates-list" id="${paramId}_list">
+            <p class="no-coordinates">No coordinates recorded yet. Click "Start Recording" and click on screen.</p>
+          </div>
+          <div class="coordinates-input-row">
+            <button type="button" class="record-coordinate-btn multi" data-param="${param.key}" data-mode="multi">
+              <span class="record-icon">🔴</span>
+              <span class="record-text">${isMulti ? 'Start Recording' : 'Record'}</span>
+            </button>
+            <button type="button" class="clear-coordinates-btn" data-param="${param.key}" style="display: none;">
+              Clear All
+            </button>
+          </div>
+          <div class="recording-status" id="${paramId}_status" style="display: none;">
+            <span class="recording-indicator">⏺ Recording...</span>
+            <span class="recording-hint">Click on screen to capture positions. Click "Stop" when done.</span>
+          </div>
+        </div>
+        <input type="hidden" id="${paramId}" value="${param.default || ''}">
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
+    } else if (param.type === 'region') {
+      // Region selection (X, Y, Width, Height) with recording button
+      html += `
+        <label>
+          ${param.label}
+          ${param.required ? '<span class="required-mark">*</span>' : ''}
+        </label>
+        <div class="region-display" id="${paramId}_display">
+          <div class="region-preview" id="${paramId}_preview">
+            <p class="no-region">No region selected. Click "Select Region" and drag on screen.</p>
+          </div>
+          <div class="region-inputs" id="${paramId}_inputs" style="display: none;">
+            <div class="region-input-row">
+              <div class="region-input-group">
+                <label>X:</label>
+                <input type="number" id="${paramId}_x" readonly>
+              </div>
+              <div class="region-input-group">
+                <label>Y:</label>
+                <input type="number" id="${paramId}_y" readonly>
+              </div>
+              <div class="region-input-group">
+                <label>W:</label>
+                <input type="number" id="${paramId}_width" readonly>
+              </div>
+              <div class="region-input-group">
+                <label>H:</label>
+                <input type="number" id="${paramId}_height" readonly>
+              </div>
+            </div>
+          </div>
+          <div class="region-input-row">
+            <button type="button" class="record-region-btn" data-param="${param.key}">
+              <span class="record-icon">🔴</span>
+              <span class="record-text">Select Region</span>
+            </button>
+            <button type="button" class="clear-region-btn" data-param="${param.key}" style="display: none;">
+              Clear
+            </button>
+          </div>
+          <div class="recording-status" id="${paramId}_status" style="display: none;">
+            <span class="recording-indicator">⏺ Select Region...</span>
+            <span class="recording-hint">Click and drag on screen to select region.</span>
+          </div>
+        </div>
+        <input type="hidden" id="${paramId}" value="">
+        ${param.help ? `<span class="param-hint">${param.help}</span>` : ''}
+        <span class="param-error"></span>
+      `;
     }
 
     html += '</div>';
@@ -1803,7 +2494,48 @@ function renderActionParametersForm(actionType) {
         updateActionPreview();
         validateAddActionForm();
       });
+
+      // For select elements, also trigger visibility updates for dependent params
+      if (param.type === 'select') {
+        input.addEventListener('change', () => {
+          addActionModalState.parameters[param.key] = input.value;
+          updateDependentParameterVisibility(actionConfig.parameters, param.key, input.value);
+        });
+      }
     }
+  });
+
+  // Update visibility of dependent parameters based on current selections
+  updateDependentParameterVisibility(actionConfig.parameters);
+
+  // Add event listeners for coordinate recording buttons
+  document.querySelectorAll('.record-coordinate-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const paramKey = btn.dataset.param;
+      const mode = btn.dataset.mode || 'single';
+      await handleCoordinateRecording(paramKey, mode, btn);
+    });
+  });
+
+  document.querySelectorAll('.clear-coordinates-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const paramKey = btn.dataset.param;
+      clearRecordedCoordinates(paramKey);
+    });
+  });
+
+  document.querySelectorAll('.record-region-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const paramKey = btn.dataset.param;
+      await handleRegionRecording(paramKey, btn);
+    });
+  });
+
+  document.querySelectorAll('.clear-region-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const paramKey = btn.dataset.param;
+      clearRecordedRegion(paramKey);
+    });
   });
 
   // Store validation function for later use
@@ -1851,6 +2583,272 @@ function validateActionParam(param, input) {
   }
 
   return error === null;
+}
+
+// ===========================================
+// COORDINATE RECORDING FUNCTIONS
+// ===========================================
+
+async function handleCoordinateRecording(paramKey, mode, button) {
+  const btnIcon = button.querySelector('.record-icon');
+  const btnText = button.querySelector('.record-text');
+  const statusEl = document.getElementById(`param_${paramKey}_status`);
+  const listEl = document.getElementById(`param_${paramKey}_list`);
+  const clearBtn = document.querySelector(`.clear-coordinates-btn[data-param="${paramKey}"]`);
+  const input = document.getElementById(`param_${paramKey}`);
+
+  if (!addActionModalState.isRecordingCoordinates) {
+    // Start recording
+    addActionModalState.isRecordingCoordinates = true;
+    addActionModalState.recordedCoordinates = [];
+
+    // Update button appearance
+    btnIcon.textContent = '⏹️';
+    btnText.textContent = 'Stop Recording';
+
+    // Show status
+    if (statusEl) statusEl.style.display = 'flex';
+
+    // Start coordinate recording in main process
+    try {
+      await window.electronAPI.startCoordinateRecording();
+    } catch (error) {
+      console.error('Failed to start coordinate recording:', error);
+      showToast('Failed to start recording', 'error');
+      // Reset state
+      addActionModalState.isRecordingCoordinates = false;
+      btnIcon.textContent = '🔴';
+      btnText.textContent = mode === 'multi' ? 'Start Recording' : 'Record';
+      if (statusEl) statusEl.style.display = 'none';
+      return;
+    }
+
+    showToast('Recording started! Click on screen to capture positions.', 'info');
+  } else {
+    // Stop recording
+    addActionModalState.isRecordingCoordinates = false;
+
+    try {
+      const result = await window.electronAPI.stopCoordinateRecording();
+
+      // Update button appearance
+      btnIcon.textContent = '🔴';
+      btnText.textContent = mode === 'multi' ? 'Start Recording' : 'Record';
+      if (statusEl) statusEl.style.display = 'none';
+
+      if (result.success && result.coordinates && result.coordinates.length > 0) {
+        addActionModalState.recordedCoordinates = result.coordinates;
+
+        // Update UI based on mode
+        if (mode === 'multi') {
+          // Display all recorded coordinates
+          const coordsText = result.coordinates.map(c => `(${c.x}, ${c.y})`).join(' | ');
+          listEl.innerHTML = `<div class="coordinates-items">${result.coordinates.map((c, i) => `<div class="coordinate-item"><span class="coord-index">${i + 1}.</span> <span class="coord-value">X: ${c.x}, Y: ${c.y}</span></div>`).join('')}</div>`;
+          listEl.style.display = 'block';
+          if (clearBtn) clearBtn.style.display = 'inline-flex';
+
+          // Store as JSON string
+          addActionModalState.parameters[paramKey] = JSON.stringify(result.coordinates);
+          input.value = JSON.stringify(result.coordinates);
+        } else {
+          // Single coordinate - use the last one
+          const lastCoord = result.coordinates[result.coordinates.length - 1];
+          input.value = JSON.stringify(lastCoord);
+          addActionModalState.parameters[paramKey] = JSON.stringify(lastCoord);
+        }
+
+        validateAddActionForm();
+        updateActionPreview();
+
+        if (mode === 'multi') {
+          showToast(`Recorded ${result.coordinates.length} position(s)`, 'success');
+        } else {
+          showToast(`Position captured: (${lastCoord.x}, ${lastCoord.y})`, 'success');
+        }
+      } else {
+        listEl.innerHTML = '<p class="no-coordinates">No positions recorded. Try again.</p>';
+        showToast('No positions captured', 'warning');
+      }
+    } catch (error) {
+      console.error('Failed to stop coordinate recording:', error);
+      showToast('Failed to stop recording', 'error');
+    }
+  }
+}
+
+function clearRecordedCoordinates(paramKey) {
+  const listEl = document.getElementById(`param_${paramKey}_list`);
+  const clearBtn = document.querySelector(`.clear-coordinates-btn[data-param="${paramKey}"]`);
+  const input = document.getElementById(`param_${paramKey}`);
+
+  addActionModalState.recordedCoordinates = [];
+  addActionModalState.parameters[paramKey] = '';
+
+  if (listEl) {
+    listEl.innerHTML = '<p class="no-coordinates">No coordinates recorded yet. Click "Start Recording" and click on screen.</p>';
+  }
+  if (input) input.value = '';
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  validateAddActionForm();
+  updateActionPreview();
+}
+
+async function handleRegionRecording(paramKey, button) {
+  const btnIcon = button.querySelector('.record-icon');
+  const btnText = button.querySelector('.record-text');
+  const statusEl = document.getElementById(`param_${paramKey}_status`);
+  const inputsEl = document.getElementById(`${paramKey}_inputs`);
+  const previewEl = document.getElementById(`${paramKey}_preview`);
+  const clearBtn = document.querySelector(`.clear-region-btn[data-param="${paramKey}"]`);
+  const inputX = document.getElementById(`${paramKey}_x`);
+  const inputY = document.getElementById(`${paramKey}_y`);
+  const inputW = document.getElementById(`${paramKey}_width`);
+  const inputH = document.getElementById(`${paramKey}_height`);
+  const input = document.getElementById(paramKey);
+
+  if (!addActionModalState.isRecordingCoordinates) {
+    // Start region recording
+    addActionModalState.isRecordingCoordinates = true;
+
+    // Update button appearance
+    btnIcon.textContent = '⏹️';
+    btnText.textContent = 'Cancel';
+
+    // Show status
+    if (statusEl) statusEl.style.display = 'flex';
+    if (previewEl) previewEl.style.display = 'none';
+
+    // Start coordinate recording (will use single click for first corner, then second click)
+    try {
+      await window.electronAPI.startCoordinateRecording();
+    } catch (error) {
+      console.error('Failed to start region recording:', error);
+      showToast('Failed to start region selection', 'error');
+      addActionModalState.isRecordingCoordinates = false;
+      btnIcon.textContent = '🔴';
+      btnText.textContent = 'Select Region';
+      if (statusEl) statusEl.style.display = 'none';
+      if (previewEl) previewEl.style.display = 'block';
+      return;
+    }
+
+    showToast('Click on screen to define region: first corner, then opposite corner.', 'info');
+
+    // We'll use the same coordinate recording but expect 2 clicks
+    // The main process will handle this
+  } else {
+    // Stop recording
+    addActionModalState.isRecordingCoordinates = false;
+
+    try {
+      const result = await window.electronAPI.stopCoordinateRecording();
+
+      // Update button appearance
+      btnIcon.textContent = '🔴';
+      btnText.textContent = 'Select Region';
+      if (statusEl) statusEl.style.display = 'none';
+
+      if (result.success && result.coordinates && result.coordinates.length >= 2) {
+        // Calculate region from two points
+        const coords = result.coordinates;
+        const x1 = coords[0].x;
+        const y1 = coords[0].y;
+        const x2 = coords[coords.length - 1].x;
+        const y2 = coords[coords.length - 1].y;
+
+        const regionX = Math.min(x1, x2);
+        const regionY = Math.min(y1, y2);
+        const regionWidth = Math.abs(x2 - x1);
+        const regionHeight = Math.abs(y2 - y1);
+
+        const regionData = {
+          x: regionX,
+          y: regionY,
+          width: regionWidth,
+          height: regionHeight
+        };
+
+        // Update UI
+        if (inputX) inputX.value = regionX;
+        if (inputY) inputY.value = regionY;
+        if (inputW) inputW.value = regionWidth;
+        if (inputH) inputH.value = regionHeight;
+        if (inputsEl) inputsEl.style.display = 'flex';
+        if (previewEl) {
+          previewEl.innerHTML = `<p class="region-selected">Region: X:${regionX}, Y:${regionY}, W:${regionWidth}, H:${regionHeight}</p>`;
+          previewEl.style.display = 'block';
+        }
+        if (clearBtn) clearBtn.style.display = 'inline-flex';
+
+        // Store as JSON
+        addActionModalState.parameters[paramKey] = JSON.stringify(regionData);
+        input.value = JSON.stringify(regionData);
+
+        validateAddActionForm();
+        updateActionPreview();
+
+        showToast(`Region selected: ${regionWidth}x${regionHeight} at (${regionX}, ${regionY})`, 'success');
+      } else if (result.success && result.coordinates && result.coordinates.length === 1) {
+        // Only one click - show single point
+        const coord = result.coordinates[0];
+        if (inputX) inputX.value = coord.x;
+        if (inputY) inputY.value = coord.y;
+        if (inputW) inputW.value = 100;
+        if (inputH) inputH.value = 100;
+        if (inputsEl) inputsEl.style.display = 'flex';
+        if (previewEl) {
+          previewEl.innerHTML = `<p class="region-selected">Point: (${coord.x}, ${coord.y}) - Default 100x100 region</p>`;
+          previewEl.style.display = 'block';
+        }
+        if (clearBtn) clearBtn.style.display = 'inline-flex';
+
+        const regionData = { x: coord.x, y: coord.y, width: 100, height: 100 };
+        addActionModalState.parameters[paramKey] = JSON.stringify(regionData);
+        input.value = JSON.stringify(regionData);
+
+        validateAddActionForm();
+        updateActionPreview();
+      } else {
+        if (previewEl) {
+          previewEl.innerHTML = '<p class="no-region">No region selected. Click "Select Region" and drag on screen.</p>';
+          previewEl.style.display = 'block';
+        }
+        showToast('No region captured. Please select two points.', 'warning');
+      }
+    } catch (error) {
+      console.error('Failed to stop region recording:', error);
+      showToast('Failed to capture region', 'error');
+    }
+  }
+}
+
+function clearRecordedRegion(paramKey) {
+  const inputsEl = document.getElementById(`${paramKey}_inputs`);
+  const previewEl = document.getElementById(`${paramKey}_preview`);
+  const clearBtn = document.querySelector(`.clear-region-btn[data-param="${paramKey}"]`);
+  const inputX = document.getElementById(`${paramKey}_x`);
+  const inputY = document.getElementById(`${paramKey}_y`);
+  const inputW = document.getElementById(`${paramKey}_width`);
+  const inputH = document.getElementById(`${paramKey}_height`);
+  const input = document.getElementById(paramKey);
+
+  addActionModalState.parameters[paramKey] = '';
+
+  if (inputX) inputX.value = '';
+  if (inputY) inputY.value = '';
+  if (inputW) inputW.value = '';
+  if (inputH) inputH.value = '';
+  if (inputsEl) inputsEl.style.display = 'none';
+  if (previewEl) {
+    previewEl.innerHTML = '<p class="no-region">No region selected. Click "Select Region" and drag on screen.</p>';
+    previewEl.style.display = 'block';
+  }
+  if (clearBtn) clearBtn.style.display = 'none';
+  if (input) input.value = '';
+
+  validateAddActionForm();
+  updateActionPreview();
 }
 
 // Update Action Preview
@@ -2074,13 +3072,32 @@ function handleLoopOptionsToggle(e) {
 function handleTriggerByTelegramToggle(e) {
   const triggerEnabled = e.target.checked;
   const loopOptionsToggle = document.getElementById('loopOptions');
+  const repeatCountInput = document.getElementById('repeatCount');
 
   if (triggerEnabled) {
-    // When Trigger By Telegram is enabled, Loop Options must also be enabled
-    loopOptionsToggle.checked = true;
-    updateRepeatCountState();
-    showToast('Trigger By Telegram enabled - Scenario will run on Telegram message', 'info');
+    // When Trigger By Telegram is enabled:
+    // - Loop Options must be disabled and set to false
+    // - Repeat Count must be disabled
+    loopOptionsToggle.checked = false;
+    loopOptionsToggle.disabled = true;
+    loopOptionsToggle.parentElement.classList.add('disabled');
+
+    repeatCountInput.disabled = true;
+    repeatCountInput.style.opacity = '0.5';
+    repeatCountInput.style.cursor = 'not-allowed';
+
+    showToast('Trigger By Telegram enabled - Loop and Repeat disabled', 'info');
   } else {
+    // When Trigger By Telegram is disabled:
+    // - Re-enable Loop Options
+    // - Re-enable Repeat Count
+    loopOptionsToggle.disabled = false;
+    loopOptionsToggle.parentElement.classList.remove('disabled');
+
+    repeatCountInput.disabled = false;
+    repeatCountInput.style.opacity = '1';
+    repeatCountInput.style.cursor = 'default';
+
     showToast('Trigger By Telegram disabled', 'info');
   }
 }
@@ -2670,8 +3687,64 @@ async function refreshMessages() {
   }
 }
 
-// Check for new messages (real implementation)
+// FIFO Message Queue for Telegram Trigger
+let telegramMessageQueue = [];
+let isProcessingTelegramQueue = false;
+let currentTelegramMessage = null;
 let telegramOffset = 0;
+
+// Auto-trigger telegram-enabled scenario when new message arrives
+async function autoTriggerTelegramScenario(message) {
+  // Find any scenario with triggerByTelegram enabled and is waiting for message
+  const telegramScenario = scenarios.find(s =>
+    s.triggerByTelegram &&
+    s.isWaitingForMessage &&
+    s.actions &&
+    s.actions.length > 0
+  );
+
+  if (!telegramScenario) {
+    console.log('No telegram-triggered scenario found waiting for message');
+    return false;
+  }
+
+  // Check if automation is running
+  if (!isAutomationRunning) {
+    console.log('Automation is not running, cannot trigger scenario');
+    return false;
+  }
+
+  // Check if another scenario is already running
+  if (runningScenarioId && runningScenarioId !== telegramScenario.id) {
+    console.log('Another scenario is already running, message queued');
+    telegramMessageQueue.push(message);
+    return false;
+  }
+
+  // Set current message for clipboard processing
+  currentTelegramMessage = message;
+
+  // Copy message content to clipboard for the scenario to use
+  try {
+    await window.electronAPI.setClipboardText(message.content);
+    console.log('Message content copied to clipboard:', message.content);
+  } catch (error) {
+    console.error('Failed to copy message to clipboard:', error);
+  }
+
+  // Show notification
+  showToast(`📨 "${telegramScenario.name}" received message! Executing...`, 'info');
+  console.log(`Auto-triggering telegram scenario: ${telegramScenario.name}`);
+
+  // Start the scenario (triggered by telegram)
+  await startScenarioExecution(telegramScenario.id, true);
+
+  // After scenario starts, add this message to the queue for tracking
+  // It will be shifted out when processed
+  telegramMessageQueue.push(message);
+
+  return true;
+}
 
 async function checkForNewMessages() {
   if (!telegramSettings.connected || !telegramSettings.botToken || !telegramSettings.chatId) {
@@ -2704,7 +3777,30 @@ async function checkForNewMessages() {
 
       // Only add if there are new text messages
       if (newMessages.length > 0) {
+        // Add to incoming messages for display
         incomingMessages = [...newMessages, ...incomingMessages];
+
+        // Auto-trigger telegram-enabled scenario waiting for message
+        // Track if triggering was successful to avoid duplicate queue additions
+        let triggeringSuccessful = false;
+        if (newMessages.length > 0) {
+          triggeringSuccessful = await autoTriggerTelegramScenario(newMessages[0]);
+        }
+
+        // FIFO Queue Processing: Add messages to queue for telegram-triggered scenarios
+        // Skip the first message if triggering was successful (it was already added)
+        const startIndex = triggeringSuccessful ? 1 : 0;
+        for (let i = startIndex; i < newMessages.length; i++) {
+          addToTelegramQueue(newMessages[i]);
+        }
+
+        // Trigger queue processing if scenario is running with telegram trigger
+        if (runningScenarioId) {
+          const scenario = scenarios.find(s => s.id === runningScenarioId);
+          if (scenario && scenario.triggerByTelegram) {
+            handleTelegramMessageQueue();
+          }
+        }
       }
 
       if (incomingMessages.length > 100) {

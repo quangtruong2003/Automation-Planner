@@ -560,6 +560,26 @@ input:checked + .slider:before {
   transform: translateX(24px);
 }
 
+/* Disabled Switch */
+.switch input:disabled + .slider {
+  background-color: var(--border-color);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch input:disabled + .slider:before {
+  background-color: var(--text-muted);
+}
+
+.switch.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch.disabled input {
+  cursor: not-allowed;
+}
+
 /* Setting Input */
 .setting-input {
   width: 120px;
@@ -1066,10 +1086,15 @@ input:checked + .slider:before {
 .add-action-modal-content {
   max-width: 520px;
   width: 95%;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .add-action-modal-body {
   padding: 20px 24px 24px 24px;
+  flex-shrink: 0;
 }
 
 .action-select {
@@ -1147,6 +1172,11 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: opacity 0.2s ease;
+}
+
+.param-form-group[data-show-if="false"] {
+  display: none;
 }
 
 .param-form-group label {
@@ -1373,6 +1403,221 @@ input:checked + .slider:before {
 
 .validation-errors li::before {
   content: "⚠️ ";
+}
+
+/* Coordinate Recording Styles */
+.coordinate-input-row,
+.coordinates-input-row,
+.region-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.record-coordinate-btn,
+.record-region-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-dark);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.record-coordinate-btn:hover,
+.record-region-btn:hover {
+  border-color: var(--primary-color);
+  background: var(--bg-hover);
+}
+
+.record-coordinate-btn.recording,
+.record-region-btn.recording {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: var(--danger-color);
+}
+
+.record-icon {
+  font-size: 14px;
+}
+
+.record-text {
+  font-weight: 500;
+}
+
+.coordinates-display,
+.region-display {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coordinates-list {
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.coordinates-list .no-coordinates {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+  margin: 0;
+}
+
+.coordinates-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.coordinate-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.coordinate-item .coord-index {
+  color: var(--primary-color);
+  font-weight: 600;
+  min-width: 24px;
+}
+
+.coordinate-item .coord-value {
+  color: var(--text-primary);
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.clear-coordinates-btn,
+.clear-region-btn {
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.clear-coordinates-btn:hover,
+.clear-region-btn:hover {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.recording-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+}
+
+.recording-indicator {
+  color: var(--danger-color);
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recording-indicator::before {
+  content: "●";
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
+.recording-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.region-preview {
+  min-height: 50px;
+  background: var(--bg-dark);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+}
+
+.region-preview .no-region {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.region-preview .region-selected {
+  color: var(--success-color);
+  font-size: 14px;
+  margin: 0;
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.region-inputs {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.region-input-row {
+  display: flex;
+  gap: 12px;
+}
+
+.region-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.region-input-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 20px;
+}
+
+.region-input-group input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: 'Monaco', 'Consolas', monospace;
+  text-align: center;
+}
+
+.region-input-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
 }
 
 /* Button States */
@@ -1784,6 +2029,35 @@ input:checked + .slider:before {
 
 .scenario-action-item:last-child {
   margin-bottom: 0;
+}
+
+/* Drag and Drop Styles */
+.scenario-action-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.scenario-action-item.drag-over {
+  border-top: 3px solid var(--primary-color);
+  background: rgba(var(--primary-rgb), 0.1);
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 4px;
+  user-select: none;
+  transition: var(--transition);
+}
+
+.drag-handle:hover {
+  color: var(--primary-color);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .action-order {

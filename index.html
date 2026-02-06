@@ -628,12 +628,12 @@
             <div class="incoming-messages-header">
               <h4>Incoming Messages</h4>
               <div class="incoming-messages-actions">
-                <button class="small-btn" id="refreshMessagesBtn">
+                <!-- <button class="small-btn" id="refreshMessagesBtn">
                   <span>🔄</span> Refresh
-                </button>
+                </button> -->
                 <button class="small-btn danger" id="clearMessagesBtn">
                   <span>🗑️</span> Clear All
-                </button>
+                </button>                
               </div>
             </div>
             <div class="table-container">
@@ -648,8 +648,7 @@
                     <th class="th-actions">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="messagesTableBody">
-                  <!-- Messages will be populated here -->
+                <tbody id="messagesTableBody">                
                 </tbody>
               </table>
             </div>
@@ -810,7 +809,7 @@
             </optgroup>
             <optgroup label="🖱️ Mouse">
               <option value="mouseMove">🎯 Move Mouse</option>
-              <option value="mouseClick">👆 Click Mouse</option>
+              <option value="mouseClick">👆 Click Mouse</opt10011283441747ion>
             </optgroup>
             <optgroup label="⌨️ Keyboard">
               <option value="typeText">📝 Type Text</option>
@@ -827,6 +826,9 @@
             </optgroup>
             <optgroup label="🖼️ Screen Capture">
               <option value="screenshotRegion">📷 Screenshot Region</option>
+            </optgroup>
+            <optgroup label="📨 Telegram">
+              <option value="sendMessageToTele">📨 Send Message To Telegram</option>
             </optgroup>
           </select>
         </div>
